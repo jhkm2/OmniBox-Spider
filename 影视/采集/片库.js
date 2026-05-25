@@ -1,8 +1,8 @@
 // @name 片库
 // @author OpenClaw Taizi
-// @description 刮削：支持，弹幕：支持，嗅探：支持
-// @dependencies: axios, cheerio
-// @version 1.0.3
+// @description 刮削：支持，弹幕：支持，嗅探：支持，CF盾绕过：支持，滑块验证：支持
+// @dependencies: axios, cheerio, crypto
+// @version 1.2.0
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/片库.js
 
 /**
@@ -14,16 +14,29 @@
  * - 刮削：支持（集成 OmniBox 刮削元数据）
  * - 弹幕：支持（通过弹幕 API 匹配）
  * - 嗅探：支持（优先直取 player_aaaa.url，失败则嗅探）
+ * - CF盾绕过：支持（通过 FlareSolverr 自动绕过 Cloudflare 防护）
+ * - 滑块验证：支持（自动识别滑块验证页面并完成验证，支持 DDDDOCR 外部服务）
  * - 搜索：站点存在验证码时支持 OCR 识别、会话缓存与 API 聚合搜索兜底
+ *
+ * 环境变量：
+ * - DANMU_API：弹幕服务地址（可选）
+ * - DDDDOCR_API / PIANKU_DDDDOCR_API：外部滑块验证服务地址（可选）
+ * - PIANKU_FLARESOLVERR_URL / FLARESOLVERR_URL：FlareSolverr 服务地址（必选，用于 CF 绕过）
+ * - PIANKU_CF_COOKIE：手动指定 cf_clearance cookie（设置后跳过自动获取）
+ * - PIANKU_CF_AUTO：是否启用自动 CF 绕过（默认开启，设为 0 关闭）
  * ============================================================================
  */
 const axios = require("axios");
+const https = require("https");
 const cheerio = require("cheerio");
+const crypto = require("crypto");
 const OmniBox = require("omnibox_sdk");
 
 const host = "https://pianku.pro";
 const DANMU_API = process.env.DANMU_API || "";
+const DDDDOCR_API = String(process.env.PIANKU_DDDDOCR_API || process.env.DDDDOCR_API || "").replace(/\/$/, "");
 const MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.1 Mobile/15E148 Safari/604.1";
+const INSECURE_HTTPS_AGENT = new https.Agent({ rejectUnauthorized: false });
 const OCR_API = "https://api.nn.ci/ocr/b64/json";
 const CATEGORY_LIST = [
   { type_id: "1", type_name: "电影" },
@@ -42,11 +55,66 @@ const BLOCKED_CATEGORIES = new Set([
   ...DEFAULT_BLOCKED_CATEGORIES.map((s) => String(s).trim().toLowerCase()),
   ...ENV_BLOCKED_CATEGORIES
 ]);
+// ==================== CF 盾绕过配置（FlareSolverr）====================
+const PIANKU_FLARESOLVERR_URL = process.env.PIANKU_FLARESOLVERR_URL || process.env.FLARESOLVERR_URL || "";
+const PIANKU_FLARESOLVERR_SESSION = process.env.PIANKU_FLARESOLVERR_SESSION || "pianku";
+const PIANKU_FLARESOLVERR_TIMEOUT_MS = parseInt(process.env.PIANKU_FLARESOLVERR_TIMEOUT_MS || "45000", 10) || 45000;
+const PIANKU_CF_COOKIE = process.env.PIANKU_CF_COOKIE || "";
+const PIANKU_CF_AUTO = process.env.PIANKU_CF_AUTO !== "0";
+const PIANKU_CF_CACHE_KEY = process.env.PIANKU_CF_CACHE_KEY || "pianku:cf_clearance";
+const PIANKU_CF_MAX_AGE_SECONDS = parseInt(process.env.PIANKU_CF_MAX_AGE_SECONDS || "21600", 10) || 21600;
+// FlareSolverr session 状态缓存
+let FS_SESSION_ACTIVE = false;
+let FS_SESSION_TIME = 0;
+const FS_SESSION_TTL = 10 * 60 * 1000; // 10分钟有效
+const FS_SESSION_CACHE_KEY = "pianku:fs_session_active";
+// ==================== CF 盾绕过配置结束 ====================
 let SESSION_CACHE = {
   cookie: null,
   expire: 0
 };
 const SESSION_TTL = 20 * 60 * 1000;
+const VERIFY_STORE = { cookie: "", verifiedAt: 0 };
+const VERIFY_CACHE_KEY = "pianku:verify-cookie";
+const VERIFY_TTL_MS = 30 * 60 * 1000;
+
+async function loadVerifyCache() {
+  if (VERIFY_STORE.cookie && Date.now() - VERIFY_STORE.verifiedAt < VERIFY_TTL_MS) {
+    return true;
+  }
+  try {
+    const cached = await OmniBox.getCache(VERIFY_CACHE_KEY);
+    if (!cached) return false;
+    const parsed = typeof cached === "string" ? JSON.parse(cached) : cached;
+    const cookie = String(parsed?.cookie || "").trim();
+    const verifiedAt = Number(parsed?.verifiedAt || 0);
+    if (cookie && Date.now() - verifiedAt < VERIFY_TTL_MS) {
+      VERIFY_STORE.cookie = cookie;
+      VERIFY_STORE.verifiedAt = verifiedAt;
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+async function saveVerifyCache() {
+  VERIFY_STORE.verifiedAt = Date.now();
+  try {
+    await OmniBox.setCache(
+      VERIFY_CACHE_KEY,
+      JSON.stringify({ cookie: VERIFY_STORE.cookie, verifiedAt: VERIFY_STORE.verifiedAt }),
+      Math.ceil(VERIFY_TTL_MS / 1000)
+    );
+  } catch (_) {}
+}
+
+async function clearVerifyCache() {
+  VERIFY_STORE.cookie = "";
+  VERIFY_STORE.verifiedAt = 0;
+  try {
+    await OmniBox.setCache(VERIFY_CACHE_KEY, JSON.stringify({ cookie: "", verifiedAt: 0 }), 1);
+  } catch (_) {}
+}
 
 const baseHeaders = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -69,6 +137,288 @@ const isCategoryBlocked = (typeId = "", typeName = "") => {
   if (!id && !name) return false;
   return BLOCKED_CATEGORIES.has(id) || BLOCKED_CATEGORIES.has(name);
 };
+
+function md5(text) {
+  return crypto.createHash("md5").update(String(text || ""), "utf8").digest("hex");
+}
+
+function stringtoHex(acSTR) {
+  let val = "";
+  for (let i = 0; i <= acSTR.length - 1; i++) val += parseInt(acSTR.charCodeAt(i)) + 1;
+  return val;
+}
+
+function mergeCookie(oldCookie, setCookie) {
+  const jar = {};
+  String(oldCookie || "").split(";").map(s => s.trim()).filter(Boolean).forEach(kv => {
+    const p = kv.indexOf("=");
+    if (p > 0) jar[kv.slice(0, p)] = kv.slice(p + 1);
+  });
+  const arr = Array.isArray(setCookie) ? setCookie : (setCookie ? [setCookie] : []);
+  arr.forEach(c => {
+    const first = String(c).split(";")[0];
+    const p = first.indexOf("=");
+    if (p > 0) jar[first.slice(0, p)] = first.slice(p + 1);
+  });
+  return Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; ");
+}
+
+function isVerifyPage(html) {
+  const text = String(html || "");
+  return text.includes("滑动验证") || text.includes("huadong_") || text.includes("yanzheng_huadong.php")
+    || text.includes("安全验证") || text.includes("slider-box") || text.includes("sliderBtn") || text.includes("向右滑动");
+}
+
+function isBlockedHtml(body) {
+  if (!body || typeof body !== "string") return false;
+  const lower = body.toLowerCase();
+  return lower.includes("just a moment") || lower.includes("cf-browser-verification") || lower.includes("captcha");
+}
+
+function cookiesArrayToString(cookies) {
+  return (Array.isArray(cookies) ? cookies : [])
+    .map((item) => ({ name: String(item?.name || "").trim(), value: String(item?.value || "").trim() }))
+    .filter((item) => item.name && item.value)
+    .map((item) => `${item.name}=${item.value}`)
+    .join("; ");
+}
+
+async function getCachedCfCookie() {
+  if (PIANKU_CF_COOKIE) return PIANKU_CF_COOKIE;
+  try {
+    const cached = await OmniBox.getCache(PIANKU_CF_CACHE_KEY);
+    return String(cached || "").trim();
+  } catch (_) { return ""; }
+}
+
+async function setCachedCfCookie(cookie) {
+  const value = String(cookie || "").trim();
+  if (!value || PIANKU_CF_COOKIE) return;
+  try { await OmniBox.setCache(PIANKU_CF_CACHE_KEY, value, PIANKU_CF_MAX_AGE_SECONDS); } catch (_) {}
+}
+
+async function fetchCfClearanceWithFlareSolverr(targetUrl) {
+  const endpoint = String(PIANKU_FLARESOLVERR_URL || "").trim();
+  if (!endpoint) throw new Error("未配置 FlareSolverr 地址");
+  const payload = { cmd: "request.get", url: targetUrl, maxTimeout: PIANKU_FLARESOLVERR_TIMEOUT_MS };
+  if (PIANKU_FLARESOLVERR_SESSION) payload.session = PIANKU_FLARESOLVERR_SESSION;
+
+  const res = await axios.post(endpoint, payload, {
+    timeout: PIANKU_FLARESOLVERR_TIMEOUT_MS + 5000,
+    headers: { "Content-Type": "application/json", "User-Agent": MOBILE_UA },
+    validateStatus: () => true,
+  });
+  if (res.status !== 200 || !res.data || res.data.status !== "ok") throw new Error(`FlareSolverr HTTP ${res.status}`);
+  const solution = res.data.solution || {};
+  const cookies = Array.isArray(solution.cookies) ? solution.cookies : [];
+  const cookie = cookiesArrayToString(cookies);
+  const cf = cookies.find((item) => String(item?.name) === "cf_clearance");
+  if (!cf?.value) throw new Error("FlareSolverr 未返回 cf_clearance");
+  const ua = String(solution.userAgent || "").trim();
+  const flareBody = String(solution.response || "");
+  logInfo(`FlareSolverr 返回结果: cookies=${cookies.length}, ua=${ua}, body长度=${flareBody.length}`);
+  return { cookie, body: flareBody, statusCode: solution.status || 200, headers: solution.headers || {}, ua };
+}
+
+async function ensureCfCookie(forceRefresh, targetUrl) {
+  if (PIANKU_CF_COOKIE) return { cookie: PIANKU_CF_COOKIE, flareResult: null };
+  if (!forceRefresh) {
+    const cached = await getCachedCfCookie();
+    if (cached) return { cookie: cached, flareResult: null };
+  }
+  if (!PIANKU_CF_AUTO) return { cookie: "", flareResult: null };
+  logInfo("开始通过 FlareSolverr 自动获取 cf_clearance");
+  try {
+    const flareResult = await fetchCfClearanceWithFlareSolverr(targetUrl);
+    if (flareResult.cookie) {
+      await setCachedCfCookie(flareResult.cookie);
+      logInfo(`已自动获取 cf_clearance，长度=${flareResult.cookie.length}`);
+    }
+    return { cookie: flareResult.cookie, flareResult };
+  } catch (error) {
+    logError("FlareSolverr 获取失败", error);
+    return { cookie: "", flareResult: null };
+  }
+}
+
+async function checkFsSessionActive() {
+  if (FS_SESSION_ACTIVE && Date.now() - FS_SESSION_TIME < FS_SESSION_TTL) return true;
+  try {
+    const cached = await OmniBox.getCache(FS_SESSION_CACHE_KEY);
+    if (cached) { FS_SESSION_ACTIVE = true; FS_SESSION_TIME = parseInt(cached) || Date.now(); return true; }
+  } catch (_) {}
+  return false;
+}
+
+async function markFsSessionActive() {
+  FS_SESSION_ACTIVE = true;
+  FS_SESSION_TIME = Date.now();
+  try { await OmniBox.setCache(FS_SESSION_CACHE_KEY, String(FS_SESSION_TIME), Math.ceil(FS_SESSION_TTL / 1000)); } catch (_) {}
+}
+
+async function flareSolverrGet(url, timeoutMs) {
+  const endpoint = String(PIANKU_FLARESOLVERR_URL || "").trim();
+  const res = await axios.post(endpoint, {
+    cmd: "request.get", url, maxTimeout: timeoutMs || PIANKU_FLARESOLVERR_TIMEOUT_MS,
+    ...(PIANKU_FLARESOLVERR_SESSION ? { session: PIANKU_FLARESOLVERR_SESSION } : {}),
+  }, {
+    timeout: (timeoutMs || PIANKU_FLARESOLVERR_TIMEOUT_MS) + 5000,
+    headers: { "Content-Type": "application/json", "User-Agent": MOBILE_UA },
+    validateStatus: () => true,
+  });
+  const fData = res.data || {};
+  const fBody = String(fData.solution?.response || "");
+  return { body: fBody, status: fData.status, cookies: fData.solution?.cookies || [] };
+}
+
+async function tryExternalVerify(pageHtml) {
+  if (!DDDDOCR_API) return false;
+  try {
+    const res = await axiosInstance.post(`${DDDDOCR_API}/verify`, {
+      url: host,
+      html: String(pageHtml || ""),
+      cookie: VERIFY_STORE.cookie,
+      type: "pianku_huadong",
+    }, {
+      headers: { "Content-Type": "application/json", ...baseHeaders },
+      timeout: 8000,
+    });
+    const data = typeof res.data === "object" ? res.data : {};
+    const cookie = data.cookie || data.cookies || (data.data && data.data.cookie) || (data.data && data.data.cookies);
+    if (cookie) {
+      VERIFY_STORE.cookie = mergeCookie(VERIFY_STORE.cookie, String(cookie).split(/;\s*/).map(x => x));
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+async function passSliderVerify(html) {
+  try {
+    if (await tryExternalVerify(html)) return true;
+
+    const scriptPath = (String(html || "").match(/src=["']([^"']*huadong_[^"']+\.js\?id=\d+)["']/i) || [])[1];
+    if (!scriptPath) return false;
+    const scriptUrl = scriptPath.startsWith("http") ? scriptPath : `${host}${scriptPath}`;
+    const jsRes = await axiosInstance.get(scriptUrl, {
+      headers: { ...baseHeaders, Cookie: VERIFY_STORE.cookie, Referer: `${host}/` },
+    });
+    VERIFY_STORE.cookie = mergeCookie(VERIFY_STORE.cookie, jsRes.headers && jsRes.headers["set-cookie"]);
+    const js = String(jsRes.data || "");
+    const key = (js.match(/key\s*=\s*["']([^"']+)["']/) || [])[1];
+    const value = (js.match(/value\s*=\s*["']([^"']+)["']/) || [])[1];
+    const verifyPath = (js.match(/c\.get\(["']([^"']*yanzheng_huadong\.php\?[^"']*)["']\s*\+/) || [])[1]
+      || (js.match(/([\w_\/.-]*yanzheng_huadong\.php\?type=[^"']+)&key=/) || [])[1];
+    if (!key || !value || !verifyPath) return false;
+
+    const verifyUrl = verifyPath.includes("&key=")
+      ? `${host}${verifyPath}${encodeURIComponent(key)}&value=${md5(stringtoHex(value))}`
+      : `${host}${verifyPath}&key=${encodeURIComponent(key)}&value=${md5(stringtoHex(value))}`;
+    const verifyRes = await axiosInstance.get(verifyUrl, {
+      headers: { ...baseHeaders, Cookie: VERIFY_STORE.cookie, Referer: `${host}/` },
+    });
+    VERIFY_STORE.cookie = mergeCookie(VERIFY_STORE.cookie, verifyRes.headers && verifyRes.headers["set-cookie"]);
+    logInfo(`滑块验证完成 status=${verifyRes.status}`);
+    return verifyRes.status >= 200 && verifyRes.status < 400;
+  } catch (e) {
+    logError("滑块验证失败", e);
+    return false;
+  }
+}
+
+async function requestWithVerify(url, options = {}) {
+  const cachedCfCookie = await getCachedCfCookie();
+  await loadVerifyCache();
+
+  // 如果 FlareSolverr session 仍在有效期内，直接通过 FS 请求，跳过直连
+  const fsActive = await checkFsSessionActive();
+  if (fsActive && PIANKU_FLARESOLVERR_URL) {
+    logInfo("FS session 活跃，直接通过 FlareSolverr 请求");
+    const fsResult = await flareSolverrGet(url, PIANKU_FLARESOLVERR_TIMEOUT_MS);
+    if (fsResult.body && !isBlockedHtml(fsResult.body) && !isVerifyPage(fsResult.body)) {
+      return { status: 200, data: fsResult.body, headers: {}, _cfBypassed: true };
+    }
+    logInfo("FS session 失效，回退到完整流程");
+  }
+
+  const headers = { ...baseHeaders, ...(options.headers || {}) };
+  if (cachedCfCookie) headers.Cookie = mergeCookie(headers.Cookie || "", cachedCfCookie);
+  if (VERIFY_STORE.verifiedAt && VERIFY_STORE.cookie) headers.Cookie = mergeCookie(headers.Cookie, VERIFY_STORE.cookie);
+
+  let res = await axiosInstance.get(url, { ...options, httpsAgent: INSECURE_HTTPS_AGENT, headers });
+  VERIFY_STORE.cookie = mergeCookie(VERIFY_STORE.cookie, res.headers && res.headers["set-cookie"]);
+  const dataStr = String(res.data || "").substring(0, 200);
+  const isBlocked = isBlockedHtml(res.data);
+  logInfo(`requestWithVerify status=${res.status} isBlocked=${isBlocked} isVerify=${isVerifyPage(res.data)} data=${dataStr}`);
+
+  // Step 1: CF 盾绕过
+  if (isBlocked && PIANKU_FLARESOLVERR_URL) {
+    logInfo("检测到 CF 挑战，通过 FlareSolverr 绕过");
+    try {
+      const bypass = await ensureCfCookie(true, url);
+      if (bypass.flareResult && bypass.flareResult.body) {
+        const flareBody = String(bypass.flareResult.body);
+        logInfo(`FlareSolverr 返回 body 长度=${flareBody.length}`);
+        if (isVerifyPage(flareBody)) {
+          logInfo("CF 绕过后检测到滑块验证页面，通过 FlareSolverr 完成验证");
+          try {
+            const verifyUrl = `${host}/verify_check.php`;
+            const verifyPayload = {
+              cmd: "request.post",
+              url: verifyUrl,
+              postData: "pass=1",
+              maxTimeout: 15000,
+            };
+            if (PIANKU_FLARESOLVERR_SESSION) verifyPayload.session = PIANKU_FLARESOLVERR_SESSION;
+            const verifyRes = await axios.post(PIANKU_FLARESOLVERR_URL, verifyPayload, {
+              timeout: 20000,
+              headers: { "Content-Type": "application/json", "User-Agent": MOBILE_UA },
+              validateStatus: () => true,
+            });
+            const vData = verifyRes.data || {};
+            logInfo(`verify POST via FS status=${verifyRes.status} fsOk=${vData.status}`);
+
+            const fsFinal = await flareSolverrGet(url, PIANKU_FLARESOLVERR_TIMEOUT_MS);
+            logInfo(`最终 GET via FS bodyLen=${fsFinal.body.length} isVerify=${isVerifyPage(fsFinal.body)}`);
+            if (fsFinal.body && !isVerifyPage(fsFinal.body) && !isBlockedHtml(fsFinal.body)) {
+              await markFsSessionActive();
+              return { ...res, data: fsFinal.body, status: 200, _cfBypassed: true };
+            }
+          } catch (e) {
+            logError("FlareSolverr slider bypass 失败", e);
+          }
+          res.data = flareBody;
+          res.status = bypass.flareResult.statusCode || 200;
+          res.headers = bypass.flareResult.headers || {};
+        } else {
+          await markFsSessionActive();
+          return { ...res, data: flareBody, status: bypass.flareResult.statusCode || 200, _cfBypassed: true };
+        }
+      }
+    } catch (e) {
+      logError("FlareSolverr 绕过失败", e);
+    }
+  }
+
+  // Step 2: 滑块验证
+  if (isVerifyPage(res.data)) {
+    if (!VERIFY_STORE.verifiedAt || res.status === 403) {
+      if (VERIFY_STORE.verifiedAt) await clearVerifyCache();
+      const ok = await passSliderVerify(res.data);
+      if (ok) {
+        await saveVerifyCache();
+        const retryHeaders = { ...baseHeaders, ...(options.headers || {}) };
+        if (cachedCfCookie) retryHeaders.Cookie = mergeCookie(retryHeaders.Cookie || "", cachedCfCookie);
+        if (VERIFY_STORE.cookie) retryHeaders.Cookie = mergeCookie(retryHeaders.Cookie || "", VERIFY_STORE.cookie);
+        res = await axiosInstance.get(url, { ...options, httpsAgent: INSECURE_HTTPS_AGENT, headers: retryHeaders });
+        VERIFY_STORE.cookie = mergeCookie(VERIFY_STORE.cookie, res.headers && res.headers["set-cookie"]);
+        if (isVerifyPage(res.data)) await clearVerifyCache();
+      }
+    }
+  }
+
+  return res;
+}
 
 const filterCategories = (categories = []) => {
   return (categories || []).filter((item) => !isCategoryBlocked(item?.type_id, item?.type_name));
@@ -114,15 +464,12 @@ const fixUrl = (url) => {
 
 const requestHtml = async (url, options = {}) => {
   try {
-    const res = await axiosInstance.get(url, {
-      headers: {
-        ...baseHeaders,
-        ...(options.headers || {})
-      },
-      responseType: "text",
-      ...options
-    });
-    return typeof res.data === "string" ? res.data : "";
+    const res = await requestWithVerify(url, { ...options, responseType: "text" });
+    const status = res.status;
+    const html = typeof res.data === "string" ? res.data : "";
+    logInfo(`请求 ${url.substring(0, 60)}... status=${status} len=${html.length}`);
+    if (html && html.length < 200) logInfo(`短响应内容: ${html.substring(0, 200)}`);
+    return html;
   } catch (e) {
     logError("请求失败", e);
     return "";
@@ -283,6 +630,7 @@ async function home(params, context) {
   const html = await requestHtml(host + "/");
   const $ = cheerio.load(html || "");
   const list = parseVideoList($, baseURL).slice(0, 60);
+  logInfo(`home 解析到 ${list.length} 条数据`);
   return {
     list,
     class: filterCategories(CATEGORY_LIST)
@@ -305,6 +653,7 @@ async function category(params, context) {
     const html = await requestHtml(url);
     const $ = cheerio.load(html || "");
     const list = parseVideoList($, baseURL);
+    logInfo(`category tid=${categoryId} pg=${pg} 解析到 ${list.length} 条数据`);
     return { list, page: pg, pagecount: list.length >= 20 ? pg + 1 : pg };
   } catch (e) {
     logError("分类获取失败", e);
@@ -471,6 +820,7 @@ async function search(params, context) {
 
   const url = `${host}/vs/-------------.html?wd=${encodeURIComponent(keyword)}`;
   const now = Date.now();
+  const cfCookie = await getCachedCfCookie();
 
   if (SESSION_CACHE.cookie && now < SESSION_CACHE.expire) {
     try {
@@ -479,17 +829,34 @@ async function search(params, context) {
         headers: {
           ...baseHeaders,
           "User-Agent": MOBILE_UA,
-          "Cookie": SESSION_CACHE.cookie
+          "Cookie": cfCookie ? mergeCookie(SESSION_CACHE.cookie, cfCookie) : SESSION_CACHE.cookie
         }
       });
       const fastHtml = typeof fastRes.data === "string" ? fastRes.data : "";
-      const result = parseSearchResults(fastHtml, baseURL, pg, keyword);
-      if (result.list.length > 0) return result;
-      if (fastHtml && !fastHtml.includes("系统安全验证") && !fastHtml.includes("请输入验证码")) {
-        logInfo("缓存会话搜索无结果，直接返回空列表");
-        return result;
+
+      // CF 盾检测
+      if (isBlockedHtml(fastHtml) && PIANKU_FLARESOLVERR_URL) {
+        logInfo("缓存搜索遇到 CF 挑战，通过 FlareSolverr 绕过");
+        const bypass = await ensureCfCookie(true, url);
+        if (bypass.flareResult && bypass.flareResult.body) {
+          const searchResult = parseSearchResults(String(bypass.flareResult.body), baseURL, pg, keyword);
+          if (searchResult.list.length > 0) return searchResult;
+        }
+        SESSION_CACHE.cookie = null;
+        SESSION_CACHE.expire = 0;
+      } else if (isVerifyPage(fastHtml)) {
+        logInfo("缓存会话遇到滑块验证，降级重新走验证码流程");
+        SESSION_CACHE.cookie = null;
+        SESSION_CACHE.expire = 0;
+      } else {
+        const result = parseSearchResults(fastHtml, baseURL, pg, keyword);
+        if (result.list.length > 0) return result;
+        if (fastHtml && !fastHtml.includes("系统安全验证") && !fastHtml.includes("请输入验证码")) {
+          logInfo("缓存会话搜索无结果，直接返回空列表");
+          return result;
+        }
+        logInfo("缓存会话失效，重新走验证码流程");
       }
-      logInfo("缓存会话失效，重新走验证码流程");
     } catch (e) {
       logError("缓存搜索失败", e);
     }
@@ -498,16 +865,59 @@ async function search(params, context) {
   for (let flow = 1; flow <= 5; flow++) {
     try {
       logInfo(`第${flow}轮验证码流程`);
+      const loopCf = await getCachedCfCookie();
       const initRes = await axiosInstance.get(url, {
         headers: {
           ...baseHeaders,
-          "User-Agent": MOBILE_UA
+          "User-Agent": MOBILE_UA,
+          ...(loopCf ? { Cookie: loopCf } : {})
         }
       });
       const initHtml = typeof initRes.data === "string" ? initRes.data : "";
+
+      // CF 盾检测
+      if (isBlockedHtml(initHtml) && PIANKU_FLARESOLVERR_URL) {
+        logInfo("搜索遇到 CF 挑战，通过 FlareSolverr 绕过");
+        const bypass = await ensureCfCookie(true, url);
+        if (bypass.flareResult && bypass.flareResult.body) {
+          const searchResult = parseSearchResults(String(bypass.flareResult.body), baseURL, pg, keyword);
+          if (searchResult.list.length > 0) return searchResult;
+          if (!isBlockedHtml(bypass.flareResult.body) && !isVerifyPage(bypass.flareResult.body) &&
+              !String(bypass.flareResult.body).includes("系统安全验证") && !String(bypass.flareResult.body).includes("请输入验证码")) {
+            logInfo("CF绕过成功但搜索结果为空，停止重试");
+            return searchResult;
+          }
+        }
+        continue;
+      }
+
       const rawCookies = initRes.headers["set-cookie"] || [];
       const cookieStr = rawCookies.map((c) => c.split(";")[0]).join("; ");
-      const finalCookie = ["gg_iscookie=1", cookieStr].filter(Boolean).join("; ");
+      let finalCookie = ["gg_iscookie=1", cookieStr].filter(Boolean).join("; ");
+      if (loopCf) finalCookie = mergeCookie(finalCookie, loopCf);
+
+      if (isVerifyPage(initHtml)) {
+        logInfo("检测到滑块验证页面，尝试滑块验证");
+        SESSION_CACHE.cookie = finalCookie;
+        VERIFY_STORE.cookie = mergeCookie(VERIFY_STORE.cookie, rawCookies);
+        const sliderOk = await passSliderVerify(initHtml);
+        if (sliderOk) {
+          await saveVerifyCache();
+          SESSION_CACHE.expire = Date.now() + SESSION_TTL;
+          const retryRes = await axiosInstance.get(url, {
+            headers: { ...baseHeaders, "User-Agent": MOBILE_UA, "Cookie": VERIFY_STORE.cookie || finalCookie, "Referer": url }
+          });
+          const retryHtml = typeof retryRes.data === "string" ? retryRes.data : "";
+          const sliderResult = parseSearchResults(retryHtml, baseURL, pg, keyword);
+          if (sliderResult.list.length > 0) return sliderResult;
+          if (retryHtml && !isVerifyPage(retryHtml) && !retryHtml.includes("系统安全验证") && !retryHtml.includes("请输入验证码")) {
+            logInfo("滑块验证通过但搜索结果为空，停止重试");
+            return sliderResult;
+          }
+        }
+        logInfo("滑块验证未通过，继续尝试OCR流程");
+        continue;
+      }
 
       if (initHtml && !initHtml.includes("系统安全验证") && !initHtml.includes("请输入验证码")) {
         const directResult = parseSearchResults(initHtml, baseURL, pg, keyword);
