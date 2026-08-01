@@ -1,7 +1,7 @@
 // @name 如意资源
 // @author 
 // @description 刮削：支持，弹幕：支持，嗅探：支持，类型筛选：支持
-// @version 1.0.1
+// @version 1.0.2
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/如意资源.js
 
 const OmniBox = require("omnibox_sdk");
@@ -804,7 +804,7 @@ async function play(params, context) {
       } catch (sniffError) {}
     }
     
-    const response = { urls: [{ name: '默认线路', url: resolvedUrl }], flag: flag, header: resolvedHeader, parse: parse };
+    const response = { urls: [{ name: '默认线路', url: resolvedUrl }], header: resolvedHeader, parse: parse };
     
     if (ruyiConfig.danmuApi) {
       let fileName = '';

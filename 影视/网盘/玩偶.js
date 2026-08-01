@@ -2,7 +2,7 @@
 // @author
 // @description 刮削：支持，弹幕：支持，播放记录：支持
 // @dependencies: axios, cheerio
-// @version 1.2.0
+// @version 1.2.1
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/网盘/玩偶.js
 
 // 引入 OmniBox SDK
@@ -1419,19 +1419,15 @@ async function play(params, context) {
 
     return {
       urls: urlsResult,
-      flag: shareURL,
       header: header,
       parse: 0,
-      danmaku: finalDanmakuList,
-    };
+      danmaku: finalDanmakuList};
   } catch (error) {
     OmniBox.log("error", `播放接口失败: ${error.message}`);
     return {
       urls: [],
-      flag: params.flag || "",
       header: {},
-      danmaku: [],
-    };
+      danmaku: []};
   }
 }
 /**

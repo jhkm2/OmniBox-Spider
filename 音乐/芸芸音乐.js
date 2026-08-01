@@ -1,5 +1,5 @@
 // @name 芸芸音乐[听]
-// @version 1.0.1
+// @version 1.0.2
 // @author Silent1566
 // @origin repo.tvshare.cn/api/files/download/[REDACTED]
 // @push 0
@@ -457,16 +457,14 @@ async function play(params, context) {
     return {
       urls,
       url: urls[0].url,
-      flag,
       parse: 0,
       header: { "User-Agent": UA, Referer: "https://music.163.com/" },
       pic: cover,
       cover,
       lrc,
-      height: 720,
-    };
+      height: 720};
   } catch (e) {
     await logError("播放失败", e);
-    return { urls: [], flag, parse: 0, header: { "User-Agent": UA, Referer: "https://music.163.com/" } };
+    return { urls: [], parse: 0, header: { "User-Agent": UA, Referer: "https://music.163.com/" } };
   }
 }

@@ -1,7 +1,7 @@
 // @name 嘟嘟短剧
 // @author 梦
 // @description API 短剧站：https://api-v2.cenguigui.cn，支持分类、搜索、详情与多清晰度播放
-// @version 1.0.1
+// @version 1.0.2
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/短剧/嘟嘟短剧.js
 
 const OmniBox = require("omnibox_sdk");
@@ -228,11 +228,10 @@ async function play(params, context) {
     return {
       parse: 0,
       urls,
-      flag,
-      header: {},
-    };
+      header: {}
+  };
   } catch (e) {
     await OmniBox.log("error", `[嘟嘟短剧][play] ${e.message}`);
-    return { parse: 0, urls: [], flag: String(params.flag || ""), header: {} };
+    return { parse: 0, urls: [], header: {} };
   }
 }

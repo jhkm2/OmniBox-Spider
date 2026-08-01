@@ -1,7 +1,7 @@
 // @name 盘搜
 // @author 
 // @description 刮削：支持，弹幕：支持，嗅探：支持，网盘：115、夸克、UC、百度、天翼、移动、阿里、迅雷、123，来源：web、tvbox、uz、emby、catvod
-// @version 1.3.9
+// @version 1.3.10
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/网盘/盘搜.js
 /**
  * OmniBox 网盘爬虫脚本
@@ -1846,12 +1846,10 @@ async function play(params, context) {
     let finalDanmakuList = danmakuList && danmakuList.length > 0 ? danmakuList : playInfo.danmaku || [];
 
     return {
-      urls: urlsResult,
-      flag: shareURL, // 返回网盘分享链接作为flag
+      urls: urlsResult, // 返回网盘分享链接作为flag
       header: header,
       parse: 0,
-      danmaku: finalDanmakuList,
-    };
+      danmaku: finalDanmakuList};
   } catch (error) {
     OmniBox.log("error", `播放接口失败: ${error.message}`);
     if (error.stack) {
@@ -1859,10 +1857,8 @@ async function play(params, context) {
     }
     return {
       urls: [],
-      flag: params.flag || "",
       header: {},
-      danmaku: [],
-    };
+      danmaku: []};
   }
 }
 

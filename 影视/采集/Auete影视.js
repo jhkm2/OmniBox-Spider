@@ -1,7 +1,7 @@
 // @name Auete影视
 // @author 梦
 // @description 刮削：不支持，弹幕：不支持，嗅探：不支持，支持站内直链播放
-// @version 1.0.1
+// @version 1.0.2
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/Auete影视.js
 
 const OmniBox = require("omnibox_sdk");
@@ -423,15 +423,13 @@ async function play(params, context) {
 
     const response = {
       parse: 0,
-      flag: meta.source || pn || "播放",
       header: PLAY_HEADERS,
       urls: [
         {
           name: meta.episodeName || "播放",
-          url: directUrl,
+          url: directUrl
         },
-      ],
-    };
+      ]};
     logInfo("播放解析完成", { playPath, pn, hasDirectUrl: Boolean(directUrl) });
     return response;
   } catch (error) {

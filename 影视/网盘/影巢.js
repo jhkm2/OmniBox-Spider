@@ -2,7 +2,7 @@
 // @author lampon
 // @description
 // @dependencies axios
-// @version 1.1.14
+// @version 1.1.16
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/网盘/影巢.js
 
 const OmniBox = require("omnibox_sdk");
@@ -40,7 +40,9 @@ const TMDB_IMAGE_POSTER_SIZE = process.env.TMDB_IMAGE_POSTER_SIZE || "w500"; // 
 // HDHive 开放接口配置
 const HDHIVE_API_BASE_URL =
   process.env.HDHIVE_API_BASE_URL || "https://hdhive.com/api/open";
+// 新版认证支持应用密钥与 OAuth 用户令牌，可单独配置或同时配置
 const HDHIVE_API_KEY = process.env.HDHIVE_API_KEY || "";
+const HDHIVE_ACCESS_TOKEN = process.env.HDHIVE_ACCESS_TOKEN || "";
 // 公共上游 HTTP 代理（可选，TMDB / HDHive 共用；示例：http://127.0.0.1:7890）
 const UPSTREAM_HTTP_PROXY_URL = process.env.UPSTREAM_HTTP_PROXY_URL || process.env.HTTP_PROXY_URL || "";
 // 兼容旧变量：若未配置公共代理，则 HDHive 仍可单独使用旧的 HDHIVE_PROXY_URL
@@ -1113,8 +1115,12 @@ async function getHDHiveResourcesCached(mediaType, tmdbId) {
 }
 
 async function requestHDHive(path, method = "GET", bodyObj = null) {
-  if (!HDHIVE_API_KEY) {
-    throw new Error("HDHive API Key 未配置：请设置 HDHIVE_API_KEY");
+  const apiKey = safeString(HDHIVE_API_KEY).trim();
+  const accessToken = safeString(HDHIVE_ACCESS_TOKEN).trim();
+  if (!apiKey && !accessToken) {
+    throw new Error(
+      "HDHive API Key/OAuth 用户令牌未配置：请设置 HDHIVE_API_KEY 或 HDHIVE_ACCESS_TOKEN",
+    );
   }
 
   const cooldownState = await getHDHiveApiCooldownState();
@@ -1138,8 +1144,9 @@ async function requestHDHive(path, method = "GET", bodyObj = null) {
     "Accept-Encoding": "gzip, deflate, br",
     Connection: "keep-alive",
     "User-Agent": "OmniBox-TMDB-Spider/1.0",
-    "X-API-Key": HDHIVE_API_KEY,
   };
+  if (apiKey) headers["X-API-Key"] = apiKey;
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
   if (method === "POST") headers["Content-Type"] = "application/json";
 
   await OmniBox.log("info", `HDHive 请求: ${method} ${path}`);
@@ -2626,19 +2633,15 @@ async function play(params, context) {
         : playInfo.danmaku || [];
     return {
       urls,
-      flag: shareURL || flag || "",
       header: playInfo.header || {},
       parse: 0,
-      danmaku: finalDanmaku,
-    };
+      danmaku: finalDanmaku};
   } catch (error) {
     await OmniBox.log("error", `tmdb.js play 出错: ${error.message}`);
     return {
       urls: [],
-      flag: safeString(params?.flag || ""),
       header: {},
       parse: 0,
-      danmaku: [],
-    };
+      danmaku: []};
   }
 }

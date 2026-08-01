@@ -1,7 +1,7 @@
 // @name 耐视点播
 // @author 梦
 // @description 页面解析：https://nsvod.me，支持首页、分类、搜索、详情与播放页解析
-// @version 1.0.2
+// @version 1.0.3
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/耐视点播.js
 // @dependencies cheerio
 
@@ -315,7 +315,6 @@ async function play(params, context) {
           return {
             parse: 0,
             urls: [{ name: "播放", url: playerData.url }],
-            flag,
             header: { "User-Agent": UA, Referer: playUrl },
           };
         }
@@ -328,7 +327,6 @@ async function play(params, context) {
       return {
         parse: 0,
         urls: [{ name: "播放", url: m3u8Match[1] }],
-        flag,
         header: { "User-Agent": UA, Referer: playUrl },
       };
     }
@@ -338,12 +336,11 @@ async function play(params, context) {
       parse: 1,
       url: playUrl,
       urls: [{ name: "播放页", url: playUrl }],
-      flag,
       header: playHeaders,
     };
   } catch (e) {
     await OmniBox.log("error", `[耐视点播][play] ${e.message}`);
-    return { parse: 0, urls: [], flag: String(params.flag || ""), header: {} };
+    return { parse: 0, urls: [], header: {} };
   }
 }
 

@@ -1,7 +1,7 @@
 // @name 瓜子APP
 // @author 
 // @description 刮削：支持，弹幕：支持，嗅探：支持
-// @version 1.0.8
+// @version 1.1.0
 // @dependencies: axios, crypto
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/瓜子.js
 
@@ -9,21 +9,8 @@
  * ============================================================================
  * 瓜子APP - OmniBox 爬虫脚本
  * ============================================================================
- * 
- * 功能说明:
- * - 提供瓜子视频APP源的 OmniBox 格式接口
- * - 支持分类浏览、搜索、详情、播放等功能
- * - 集成 RSA/AES 加密通信
- * - 搜索过滤功能，精准匹配搜索结果
- * 
- * 主要特性:
- * 1. 分类支持：电影、电视剧、动漫、综艺、短剧
- * 2. 筛选功能：支持年份、地区、排序等筛选条件
- * 3. 加密通信：RSA解密 + AES加解密 + MD5签名
- * 4. 缓存机制：提升请求性能
- * 5. 搜索过滤：精准匹配结果
- * 
- * 日期: 2025.02.27
+ *
+ * 对齐最新 Guazi 协议（2026-07）：动态 token + 新 AES/headers/多域名
  * ============================================================================
  */
 
@@ -31,50 +18,32 @@ const OmniBox = require("omnibox_sdk");
 const crypto = require("crypto");
 const axios = require("axios");
 const https = require("https");
+const http = require("http");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
 
 /**
- * 配置信息
+ * 对齐最新 Guazi Java 源（2026-07）：动态 token + 新 AES/headers
  */
-const config = {
-    host: 'https://api.w32z7vtd.com',
-    headers: {
-        'Cache-Control': 'no-cache',
-        'Version': '2406025',
-        'PackageName': 'com.uf076bf0c246.qe439f0d5e.m8aaf56b725a.ifeb647346f',
-        'Ver': '1.9.2',
-        'Referer': 'https://api.w32z7vtd.com',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'okhttp/3.12.0'
-    },
-    timeout: 10000
-};
-const DANMU_API = process.env.DANMU_API || "";
+const API_HOSTS = [
+    "https://apinew.uozvr.com",
+    "https://api.w32z7vtd.com",
+    "https://api.6a7nnf7.com",
+    "https://api.umygrx3.com",
+    "https://api.rmedphk.com",
+];
 
-/**
- * 创建 HTTPS Agent (忽略 SSL 证书验证)
- */
-const httpsAgent = new https.Agent({
-    keepAlive: true,
-    keepAliveMsecs: 1000,
-    maxSockets: 50,
-    maxFreeSockets: 10,
-    scheduling: 'lifo',
-    rejectUnauthorized: false  // 忽略 SSL 证书验证
-});
-
-/**
- * 创建 Axios 实例
- */
-const axiosInstance = axios.create({
-    httpsAgent,
-    timeout: config.timeout,
-    headers: config.headers
-});
-
-/**
- * RSA 私钥
- */
-const privateKey = `-----BEGIN PRIVATE KEY-----
+const AES_KEY = "OITxa5OqAYjhswxx";
+const AES_IV = "rCMNwZASNBKZ8mXV";
+const DEVICE_OLD_KEY = "aLFBMWpxBrIDAD1Si/KVvm41";
+const RSA_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDUM5+/y8sPsWkd1/RQS64X259E
+UwxFXFE5HlA65MqrxnPs0JqoSRojSDy5QhwvROlaD6TwRQHKMY2OAZ6SnQeUJsCh
+TEFIR9qUkwrs3/MVUMxjsv6JS6Oe/juclyJGTgVmDhB55EafXsD0SQYVj/QXXsxR
+6ewR5E2kL52yAAD4yQIDAQAB
+-----END PUBLIC KEY-----`;
+const RSA_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
 MIICdgIBADANBgkqhkiG9w0BAQEFAASCAmAwggJcAgEAAoGAe6hKrWLi1zQmjTT1
 ozbE4QdFeJGNxubxld6GrFGximxfMsMB6BpJhpcTouAqywAFppiKetUBBbXwYsYU
 1wNr648XVmPmCMCy4rY8vdliFnbMUj086DU6Z+/oXBdWU3/b1G0DN3E9wULRSwcK
@@ -91,8 +60,21 @@ L3NhUhsaOVy55MHXnPjdcTX0FaLi+ybXZIfIQ2P4rb19mVq1feMbCXhz+L1rG8oa
 t5lYKfpe8k83ZA==
 -----END PRIVATE KEY-----`;
 
-const staticKeys = "Qmxi5ciWXbQzkr7o+SUNiUuQxQEf8/AVyUWY4T/BGhcXBIUz4nOyHBGf9A4KbM0iKF3yp9M7WAY0rrs5PzdTAOB45plcS2zZ0wUibcXuGJ29VVGRWKGwE9zu2vLwhfgjTaaDpXo4rby+7GxXTktzJmxvneOUdYeHi+PZsThlvPI=";
-const token = '1be86e8e18a9fa18b2b8d5432699dad0.ac008ed650fd087bfbecf2fda9d82e9835253ef24843e6b18fcd128b10763497bcf9d53e959f5377cde038c20ccf9d17f604c9b8bb6e61041def86729b2fc7408bd241e23c213ac57f0226ee656e2bb0a583ae0e4f3bf6c6ab6c490c9a6f0d8cdfd366aacf5d83193671a8f77cd1af1ff2e9145de92ec43ec87cf4bdc563f6e919fe32861b0e93b118ec37d8035fbb3c.59dd05c5d9a8ae726528783128218f15fe6f2c0c8145eddab112b374fcfe3d79';
+const PLAY_UA = "Lavf/57.83.100";
+const PLAY_REFERER = "http://WJiZxLXA2.com/";
+const AUTH_FILE = process.env.GUAZI_AUTH_FILE || path.join(os.tmpdir(), "guazi_auth.json");
+const DANMU_API = process.env.DANMU_API || "";
+
+const state = {
+    apiHost: API_HOSTS[0],
+    token: "",
+    tokenId: "",
+    deviceId: "",
+    deviceKey: "",
+    registered: false,
+    tokenReady: false,
+    hostReady: false,
+};
 
 /**
  * 分类配置
@@ -104,6 +86,18 @@ const CLASSES = [
     { type_id: "3", type_name: "综艺" },
     { type_id: "64", type_name: "短剧" }
 ];
+
+/**
+ * Java SUB_MAP
+ */
+const SUB_MAP = {
+    "1": "5",
+    "2": "12",
+    "3": "30",
+    "4": "22",
+    "64": "",
+    "5": "0",
+};
 
 /**
  * 筛选配置
@@ -347,7 +341,10 @@ const API_PATHS = {
     PLAY_INFO: '/App/IndexPlay/playInfo',
     VURL_SHOW: '/App/Resource/Vurl/show',
     VURL_DETAIL: '/App/Resource/VurlDetail/showOne',
-    FIND_MORE: '/App/Index/findMoreVod'
+    FIND_MORE: '/App/Index/findMoreVod',
+    SIGN_UP: '/App/Authentication/Device/signUp',
+    SIGN_IN: '/App/Authentication/Device/signIn',
+    REFRESH: '/App/Authentication/Authenticator/refresh'
 };
 
 /**
@@ -380,82 +377,6 @@ const cache = {
 };
 
 /**
- * RSA 解密工具
- */
-const rsaTool = {
-    decode: (data) => {
-        if (!data) return null;
-        try {
-            const buffer = Buffer.from(data, 'base64');
-            const blockSize = 256;
-            let decryptedParts = [];
-
-            for (let i = 0; i < buffer.length; i += blockSize) {
-                const chunk = buffer.slice(i, i + blockSize);
-                const decChunk = crypto.privateDecrypt({
-                    key: privateKey,
-                    padding: crypto.constants.RSA_NO_PADDING,
-                }, chunk);
-
-                let start = 0;
-                while (start < decChunk.length && decChunk[start] === 0) start++;
-                const realStart = decChunk.indexOf(0, 2);
-
-                if (realStart !== -1) {
-                    decryptedParts.push(decChunk.slice(realStart + 1));
-                } else {
-                    decryptedParts.push(decChunk.slice(start));
-                }
-            }
-            return Buffer.concat(decryptedParts).toString('utf8').trim();
-        } catch (e) {
-            OmniBox.log('error', `[瓜子APP] RSA解密失败: ${e.message}`);
-            return null;
-        }
-    }
-};
-
-/**
- * 加密工具
- */
-const cryptoTool = {
-    md5: (text) => crypto.createHash('md5').update(text).digest('hex'),
-    
-    aesEncrypt: (text) => {
-        try {
-            const key = Buffer.from('mvXBSW7ekreItNsT', 'utf8');
-            const iv = Buffer.from('2U3IrJL8szAKp0Fj', 'utf8');
-            const cipher = crypto.createCipheriv('aes-128-cbc', key, iv);
-            let encrypted = cipher.update(text, 'utf8', 'hex');
-            encrypted += cipher.final('hex');
-            return encrypted.toUpperCase();
-        } catch (e) {
-            OmniBox.log('error', `[瓜子APP] AES加密失败: ${e.message}`);
-            return '';
-        }
-    },
-    
-    aesDecrypt: (text, keyStr, ivStr) => {
-        try {
-            const key = Buffer.from(keyStr, 'utf8');
-            const iv = Buffer.from(ivStr, 'utf8');
-            const decipher = crypto.createDecipheriv('aes-128-cbc', key, iv);
-            let decrypted = decipher.update(text, 'hex', 'utf8');
-            decrypted += decipher.final('utf8');
-            return decrypted;
-        } catch (e) {
-            OmniBox.log('error', `[瓜子APP] AES解密失败: ${e.message}`);
-            return '';
-        }
-    },
-    
-    generateSignature: (requestKey, timestamp) => {
-        const signStr = `token_id=,token=${token},phone_type=1,request_key=${requestKey},app_id=1,time=${timestamp},keys=${staticKeys}*&zvdvdvddbfikkkumtmdwqppp?|4Y!s!2br`;
-        return cryptoTool.md5(signStr);
-    }
-};
-
-/**
  * 日志工具
  */
 const logInfo = (message, data = null) => {
@@ -473,6 +394,330 @@ const logError = (message, error) => {
 const logWarn = (message) => {
     OmniBox.log("warn", `[瓜子APP] ${message}`);
 };
+
+function stableStringify(value) {
+    if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+    if (!value || typeof value !== "object") return JSON.stringify(value);
+    return `{${Object.keys(value)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+        .join(",")}}`;
+}
+
+function apiJsonStringify(value) {
+    return JSON.stringify(value).replace(/[^\x00-\x7F]/g, (char) => {
+        return `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`;
+    });
+}
+
+function md5Upper(value) {
+    return crypto.createHash("md5").update(String(value)).digest("hex").toUpperCase();
+}
+
+function aesEncryptHex(text, key = AES_KEY, iv = AES_IV) {
+    const cipher = crypto.createCipheriv("aes-128-cbc", Buffer.from(key, "utf8"), Buffer.from(iv, "utf8"));
+    cipher.setAutoPadding(true);
+    return Buffer.concat([cipher.update(String(text), "utf8"), cipher.final()]).toString("hex").toUpperCase();
+}
+
+function aesDecryptHex(hexText, key, iv) {
+    const decipher = crypto.createDecipheriv("aes-128-cbc", Buffer.from(key, "utf8"), Buffer.from(iv, "utf8"));
+    decipher.setAutoPadding(true);
+    return Buffer.concat([
+        decipher.update(Buffer.from(String(hexText || ""), "hex")),
+        decipher.final(),
+    ]).toString("utf8");
+}
+
+function rsaEncrypt(data) {
+    return crypto
+        .publicEncrypt(
+            { key: RSA_PUBLIC_KEY, padding: crypto.constants.RSA_PKCS1_PADDING },
+            Buffer.from(String(data), "utf8")
+        )
+        .toString("base64");
+}
+
+function rsaDecrypt(encryptedText) {
+    const encrypted = Buffer.from(String(encryptedText || ""), "base64");
+    try {
+        return crypto
+            .privateDecrypt({ key: RSA_PRIVATE_KEY, padding: crypto.constants.RSA_PKCS1_PADDING }, encrypted)
+            .toString("utf8");
+    } catch (error) {
+        if (!crypto.constants.RSA_NO_PADDING) throw error;
+    }
+    const raw = crypto.privateDecrypt({ key: RSA_PRIVATE_KEY, padding: crypto.constants.RSA_NO_PADDING }, encrypted);
+    if (raw[0] !== 0x00 || raw[1] !== 0x02) throw new Error("响应密钥 RSA padding 不匹配");
+    const split = raw.indexOf(0x00, 2);
+    if (split < 10) throw new Error("响应密钥 RSA padding 无效");
+    return raw.slice(split + 1).toString("utf8");
+}
+
+function loadAuth() {
+    try {
+        if (fs.existsSync(AUTH_FILE)) {
+            const data = JSON.parse(fs.readFileSync(AUTH_FILE, "utf8"));
+            state.token = String(data.token || "");
+            state.tokenId = String(data.tokenId || data.token_id || "");
+            state.deviceId = String(data.deviceId || data.device_id || "");
+            state.deviceKey = String(data.deviceKey || data.device_key || "");
+            state.registered = !!data.registered || !!state.token;
+        }
+    } catch {}
+
+    if (state.deviceId && state.deviceKey) return;
+
+    state.deviceId = String(864150060000000 + Math.floor(Math.random() * 10000));
+    state.deviceKey = crypto.randomBytes(20).toString("hex").toUpperCase();
+    state.token = "";
+    state.tokenId = "";
+    state.registered = false;
+    saveAuth();
+}
+
+function saveAuth() {
+    try {
+        fs.writeFileSync(
+            AUTH_FILE,
+            JSON.stringify(
+                {
+                    token: state.token,
+                    tokenId: state.tokenId,
+                    deviceId: state.deviceId,
+                    deviceKey: state.deviceKey,
+                    registered: state.registered,
+                },
+                null,
+                2
+            )
+        );
+    } catch (e) {
+        logWarn(`保存认证信息失败: ${e.message}`);
+    }
+}
+
+function getHeaders() {
+    return {
+        "User-Agent": PLAY_UA,
+        code: "GZ0369",
+        deviceId: state.deviceId || "",
+        lang: "zh_cn",
+        "Cache-Control": "no-cache",
+        "Content-Type": "application/x-www-form-urlencoded",
+        Version: "2604028",
+        PackageName: "com.ae06aebdbb.y286327f5a.ofe849883320260517",
+        Ver: "3.0.3.2",
+        "api-ver": "3.0.3.2",
+    };
+}
+
+const client = axios.create({
+    timeout: 22000,
+    maxRedirects: 3,
+    httpAgent: new http.Agent({ keepAlive: true }),
+    httpsAgent: new https.Agent({ keepAlive: true, rejectUnauthorized: false }),
+    validateStatus: () => true,
+});
+
+async function findAvailableHost() {
+    for (const host of API_HOSTS) {
+        try {
+            const res = await axios.head(host, {
+                timeout: 3000,
+                httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+                validateStatus: () => true,
+                headers: { "User-Agent": "Mozilla/5.0" },
+            });
+            if (res.status >= 200 && res.status < 500) {
+                state.apiHost = host;
+                state.hostReady = true;
+                logInfo("选用 API 域名", { host });
+                return host;
+            }
+        } catch {}
+    }
+    state.apiHost = API_HOSTS[0];
+    state.hostReady = true;
+    return state.apiHost;
+}
+
+async function ensureHost() {
+    if (!state.hostReady) await findAvailableHost();
+    return state.apiHost;
+}
+
+function applyAuth(result = {}) {
+    const newToken = String(result.token || "");
+    if (!newToken) throw new Error(`Token 获取失败: ${JSON.stringify(result)}`);
+    state.token = newToken;
+    const newTokenId = String(result.app_user_id || result.token_id || "");
+    if (newTokenId) state.tokenId = newTokenId;
+    saveAuth();
+}
+
+async function rawApiRequest(path, params = {}, retry = 0, options = {}) {
+    const authPath = String(path).startsWith("/App/Authentication/");
+    if (!authPath) await ensureToken();
+
+    const host = await ensureHost();
+    const requestParams = { ...(params || {}) };
+    if (Object.prototype.hasOwnProperty.call(requestParams, "token")) requestParams.token = state.token;
+    if (Object.prototype.hasOwnProperty.call(requestParams, "token_id")) requestParams.token_id = state.tokenId;
+
+    const useCache = options.useCache === true && !authPath;
+    const cacheKey = `${host}|${path}|${stableStringify(requestParams)}|${state.tokenId}`;
+    if (useCache) {
+        const cached = cache.get(cacheKey);
+        if (cached) {
+            logInfo("使用缓存数据", { path });
+            return cached;
+        }
+    }
+
+    const jsonParams = apiJsonStringify(requestParams);
+    const requestKey = aesEncryptHex(jsonParams);
+    const time = String(Math.floor(Date.now() / 1000));
+    const keys = rsaEncrypt(JSON.stringify({ iv: AES_IV, key: AES_KEY }));
+    const tokenForSign = state.token || "";
+    const signStr =
+        `token_id=,token=${tokenForSign},phone_type=1,request_key=${requestKey}` +
+        `,app_id=1,time=${time},keys=${keys}*&zvdvdvddbfikkkumtmdwqppp?|4Y!s!2br`;
+    const signature = md5Upper(signStr);
+
+    const body = new URLSearchParams({
+        token: tokenForSign,
+        token_id: "",
+        phone_type: "1",
+        time,
+        phone_model: "xiaomi-25031",
+        keys,
+        request_key: requestKey,
+        signature,
+        app_id: "1",
+        ad_version: "1",
+    }).toString();
+
+    logInfo(`发送API请求`, { url: `${host}${path}`, retry });
+    const res = await client.post(`${host}${path}`, body, { headers: getHeaders() });
+    if (res.status < 200 || res.status >= 400) {
+        throw new Error(`HTTP ${res.status} ${path}`);
+    }
+
+    const response = typeof res.data === "string" ? JSON.parse(res.data) : res.data;
+    if (!response || typeof response !== "object") throw new Error(`空响应 ${path}`);
+
+    if (response.code != null && Number(response.code) !== 200) {
+        if (retry < 1 && !authPath) {
+            state.tokenReady = false;
+            await ensureToken(true);
+            return rawApiRequest(path, params, retry + 1, options);
+        }
+        throw new Error(`请求失败: ${JSON.stringify(response)}`);
+    }
+
+    const encryptedData = response.data || {};
+    if (!encryptedData.keys || !encryptedData.response_key) {
+        throw new Error(`API 返回缺少加密数据: ${path}`);
+    }
+    const keyInfo = JSON.parse(rsaDecrypt(encryptedData.keys));
+    const decrypted = aesDecryptHex(encryptedData.response_key, keyInfo.key, keyInfo.iv);
+    const result = JSON.parse(decrypted);
+    if (useCache) {
+        const cacheType = options.cacheType || "category";
+        cache.set(cacheKey, result, cacheType);
+    }
+    logInfo("API请求成功", { path });
+    return result;
+}
+
+async function signUp() {
+    const result = await rawApiRequest(API_PATHS.SIGN_UP, {
+        new_key: state.deviceKey,
+        old_key: DEVICE_OLD_KEY,
+        phone_type: 1,
+        code: "",
+    });
+    applyAuth(result);
+    state.registered = true;
+    saveAuth();
+}
+
+async function signIn() {
+    const result = await rawApiRequest(API_PATHS.SIGN_IN, {
+        new_key: state.deviceKey,
+        old_key: DEVICE_OLD_KEY,
+    });
+    applyAuth(result);
+}
+
+async function ensureToken(force = false) {
+    if (!force && state.tokenReady && state.token) return;
+    loadAuth();
+    if (!state.token) {
+        if (state.registered) await signIn();
+        else await signUp();
+    }
+    try {
+        applyAuth(await rawApiRequest(API_PATHS.REFRESH, {}));
+    } catch (error) {
+        if (!state.registered) throw error;
+        await signIn();
+    }
+    state.tokenReady = true;
+}
+
+/**
+ * API 请求函数（兼容旧调用）
+ */
+const apiRequest = async (data, path, cacheType = "category", retries = 1) => {
+    try {
+        return await rawApiRequest(path, data, 0, {
+            useCache: cacheType !== "none",
+            cacheType: cacheType === "none" ? "category" : cacheType,
+        });
+    } catch (e) {
+        if (retries > 0) {
+            logWarn(`API请求失败，重试: ${e.message}`);
+            try {
+                return await rawApiRequest(path, data, 0, {
+                    useCache: false,
+                    cacheType: cacheType === "none" ? "category" : cacheType,
+                });
+            } catch (e2) {
+                logError("API请求最终失败", e2);
+                return null;
+            }
+        }
+        logError("API请求最终失败", e);
+        return null;
+    }
+};
+
+/**
+ * 获取分辨率分数（用于排序）
+ */
+const getResolutionScore = (res) => {
+    const r = String(res || "").toLowerCase().replace("p", "");
+    if (r === "8k") return 100;
+    if (r === "4k" || r === "2160") return 90;
+    if (r === "1440") return 80;
+    if (r === "1080") return 70;
+    if (r === "720") return 60;
+    if (r === "超清") return 50;
+    if (r === "高清") return 40;
+    if (r === "标清") return 30;
+    return 10;
+};
+
+function parseParamString(value) {
+    const text = String(value || "").replace(/&amp;/g, "&").replace(/^\?/, "");
+    const params = {};
+    for (const [key, val] of new URLSearchParams(text)) {
+        params[key === "vod_d_id" ? "vod_id" : key] = val;
+    }
+    return params;
+}
 
 /**
  * 弹幕工具函数
@@ -634,129 +879,6 @@ const extractVodIdForApi = (rawVideoId) => {
     return numMatch?.[1] || decoded;
 };
 
-/**
- * API 请求函数
- */
-const apiRequest = async (data, path, cacheType = 'category', retries = 1) => {
-    const cacheKey = `${path}|${JSON.stringify(data)}`;
-
-    if (cacheType !== 'none') {
-        const cached = cache.get(cacheKey);
-        if (cached) {
-            logInfo('使用缓存数据', { path });
-            return cached;
-        }
-    }
-
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const requestKey = cryptoTool.aesEncrypt(JSON.stringify(data));
-    if (!requestKey) {
-        logError('AES加密失败', new Error('requestKey为空'));
-        return null;
-    }
-    
-    const signature = cryptoTool.generateSignature(requestKey, timestamp);
-
-    const postBody = new URLSearchParams({
-        token: token,
-        token_id: '',
-        phone_type: '1',
-        time: timestamp,
-        phone_model: 'xiaomi-22021211rc',
-        keys: staticKeys,
-        request_key: requestKey,
-        signature,
-        app_id: '1',
-        ad_version: '1'
-    }).toString();
-
-    let lastError = null;
-    for (let i = 0; i <= retries; i++) {
-        try {
-            logInfo(`发送API请求 (尝试 ${i + 1}/${retries + 1})`, { url: `${config.host}${path}` });
-            
-            // 使用 axios 发起请求
-            const response = await axiosInstance.post(`${config.host}${path}`, postBody);
-
-            if (response.status !== 200 || !response.data?.data) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-
-            // 🔍 添加：打印响应数据的结构
-            logInfo('原始响应数据', {
-                status: response.status,
-                hasData: !!response.data,
-                dataType: typeof response.data,
-                dataKeys: response.data ? Object.keys(response.data) : [],
-                hasDataData: !!response.data?.data,
-                dataDataKeys: response.data?.data ? Object.keys(response.data.data) : []
-            });
-
-            const keysData = rsaTool.decode(response.data.data.keys);
-            if (!keysData) {
-                throw new Error("RSA解密失败");
-            }
-
-            const keys = JSON.parse(keysData);
-            const decryptedData = cryptoTool.aesDecrypt(
-                response.data.data.response_key,
-                keys.key,
-                keys.iv
-            );
-
-            if (!decryptedData) {
-                throw new Error("AES解密失败");
-            }
-
-            // 🔍 添加：打印解密后的原始字符串（前200字符）
-            logInfo('解密后的原始数据', {
-                length: decryptedData.length,
-                preview: decryptedData.substring(0, 200)
-            });
-
-            const result = JSON.parse(decryptedData);
-
-            // 🔍 添加：打印解析后的数据结构
-            logInfo('解析后的数据结构', {
-                type: typeof result,
-                keys: result ? Object.keys(result) : [],
-                hasList: !!result?.list,
-                listType: typeof result?.list,
-                isArray: Array.isArray(result?.list)
-            });
-
-            if (cacheType !== 'none' && result) {
-                cache.set(cacheKey, result, cacheType);
-            }
-            
-            logInfo('API请求成功', { path });
-            return result;
-        } catch (e) {
-            lastError = e;
-            logWarn(`API请求失败 (尝试 ${i + 1}/${retries + 1}): ${e.message}`);
-        }
-    }
-    
-    logError('API请求最终失败', lastError);
-    return null;
-};
-
-/**
- * 获取分辨率分数（用于排序）
- */
-const getResolutionScore = (res) => {
-    const r = res.toLowerCase().replace('p', '');
-    if (r === '8k') return 100;
-    if (r === '4k' || r === '2160') return 90;
-    if (r === '1440') return 80;
-    if (r === '1080') return 70;
-    if (r === '720') return 60;
-    if (r === '超清') return 50;
-    if (r === '高清') return 40;
-    if (r === '标清') return 30;
-    return 10;
-};
-
 /* ============================================================================
  * OmniBox 接口实现
  * ============================================================================ */
@@ -817,6 +939,7 @@ async function category(params) {
         const area = filters.area || '0';
         const year = filters.year || '0';
         const sort = filters.sort || 'd_id';
+        const tid = String(categoryId);
 
         logInfo('获取分类列表', { categoryId, page, area, year, sort });
 
@@ -826,20 +949,9 @@ async function category(params) {
             pageSize: "20",
             sort: sort,
             page: page.toString(),
-            tid: categoryId
+            tid: tid,
+            sub: SUB_MAP[tid] != null ? SUB_MAP[tid] : "0",
         }, API_PATHS.INDEX_LIST, 'category');
-
-        // 🔍 添加详细的数据结构日志
-        logInfo('API返回的原始数据结构', {
-            hasData: !!data,
-            dataKeys: data ? Object.keys(data) : [],
-            hasList: data ? !!data.list : false,
-            listLength: data?.list ? data.list.length : 0,
-            listType: data?.list ? typeof data.list : 'undefined',
-            isArray: data?.list ? Array.isArray(data.list) : false,
-            // 如果list存在，输出前2项看看结构
-            firstItems: data?.list ? data.list.slice(0, 2) : []
-        });
 
         if (!data || !data.list) {
             logWarn('分类列表数据为空');
@@ -903,7 +1015,6 @@ async function search(params) {
 
         const totalPage = parseInt(data.totalPage || 0);
 
-        // 关键点：对 API 返回结果进行二次过滤，确保标题中包含关键词
         const filteredList = data.list
             .filter(item => item.vod_name && item.vod_name.toLowerCase().includes(keyword.toLowerCase()))
             .map(item => ({
@@ -951,12 +1062,14 @@ async function detail(params) {
                 const videoIdForScrape = String(idStr || '');
                 const vodId = extractVodIdForApi(idStr);
 
+                await ensureToken();
+
                 const [detailData, playData] = await Promise.all([
                     apiRequest({
-                        token_id: "1649412",
+                        token_id: state.tokenId,
                         vod_id: vodId,
                         mobile_time: Math.floor(Date.now() / 1000).toString(),
-                        tokename: token
+                        token: state.token
                     }, API_PATHS.PLAY_INFO, 'detail'),
                     apiRequest({
                         vurl_cloud_id: "2",
@@ -971,7 +1084,6 @@ async function detail(params) {
 
                 const vod = detailData.vodInfo;
 
-                // 构建新格式的播放源
                 const vodPlaySources = [];
                 const scrapeCandidates = [];
                 if (playData?.list) {
@@ -990,12 +1102,11 @@ async function detail(params) {
 
                         if (params.length > 0) {
                             resolutions.sort((a, b) => getResolutionScore(b) - getResolutionScore(a));
-                            const playName = playData.list.length === 1 
-                                ? (vod.vod_name || '正片') 
+                            const playName = playData.list.length === 1
+                                ? (vod.vod_name || '正片')
                                 : (item.name || (index + 1).toString());
                             const playUrl = `${params[0]}||${resolutions.join('@')}`;
-                            
-                            // 只添加第一个线路，所有集数都在这个线路下
+
                             if (vodPlaySources.length === 0) {
                                 vodPlaySources.push({
                                     name: '瓜子专线',
@@ -1025,8 +1136,6 @@ async function detail(params) {
                 let videoMappings = [];
                 if (scrapeCandidates.length > 0) {
                     try {
-                        // 以视频ID作为刮削资源ID，保证同一条目下刮削结果稳定复用
-                        
                         const scrapingResult = await OmniBox.processScraping(videoId, vod.vod_name || '', vod.vod_name || '', scrapeCandidates);
                         OmniBox.log('info', `[瓜子APP] 刮削处理完成,结果: ${JSON.stringify(scrapingResult || {}).substring(0, 200)}`);
                         const metadata = await OmniBox.getScrapeMetadata(videoId);
@@ -1126,7 +1235,6 @@ async function play(params) {
             episodeName = playMeta.e || '';
         }
 
-        // 统一使用 videoId 维度读取刮削元数据，与 detail 阶段保持一致
         let scrapedDanmuFileName = '';
         try {
             const videoIdFromParam = params.vodId ? String(params.vodId) : '';
@@ -1155,38 +1263,39 @@ async function play(params) {
 
         logInfo('获取播放地址', { playId: playId });
 
+        const playHeader = {
+            "User-Agent": PLAY_UA,
+            Referer: PLAY_REFERER,
+        };
+
         const parts = playId.split('||');
         let playResponse;
         if (parts.length < 2) {
             playResponse = {
                 urls: [{ name: '播放', url: playId }],
-                header: {"User-Agent": "com.android.chrome/5.0.6 (Linux;Android 9)  AndroidXMedia3/1.9.2"},
-                parse: 0 
+                header: playHeader,
+                parse: 0
             };
         } else {
             const paramStr = parts[0];
             const resolutions = parts[1].split('@');
 
-            const requestParams = {};
-            paramStr.split('&').forEach(pair => {
-                const [k, v] = pair.split('=');
-                if (k) requestParams[k] = v || '';
-            });
+            const requestParams = parseParamString(paramStr);
 
             if (resolutions.length > 0) {
                 resolutions.sort((a, b) => getResolutionScore(b) - getResolutionScore(a));
                 requestParams.resolution = resolutions[0];
             }
 
-            const data = await apiRequest(requestParams, API_PATHS.VURL_DETAIL, 'play');
+            const data = await apiRequest(requestParams, API_PATHS.VURL_DETAIL, 'none');
 
             const playUrl = data?.url || '';
-            
+
             logInfo('播放地址获取成功', { url: playUrl });
 
             playResponse = {
                 urls: [{ name: '播放', url: playUrl }],
-                header: {"User-Agent": "com.android.chrome/5.0.6 (Linux;Android 9)  AndroidXMedia3/1.9.2"},
+                header: playHeader,
                 parse: 0
             };
         }

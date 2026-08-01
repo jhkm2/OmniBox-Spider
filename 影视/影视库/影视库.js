@@ -1,7 +1,7 @@
 // @name 影视库
 // @author lampon
 // @description 
-// @version 1.0.0
+// @version 1.0.1
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/影视库/影视库.js
 
 
@@ -516,13 +516,13 @@ async function play(params, context) {
             await OmniBox.log("warn", `[media_library_cloud] addPlayHistory: ${e.message}`);
         }
 
-        return { urls: [{ name: "播放", url: urlOnly }], flag: kind, header, parse: 0, danmaku: Array.isArray(danmaku) ? danmaku : [] };
+        return { urls: [{ name: "播放", url: urlOnly }], header, parse: 0, danmaku: Array.isArray(danmaku) ? danmaku : [] };
     }
     else {
 
             const fid = fileId;
             const shareURL = item.from;
-            if (!shareURL || !fid) return { urls: [], flag: "", header: {}, parse: 0, danmaku: [] };
+            if (!shareURL || !fid) return { urls: [], header: {}, parse: 0, danmaku: [] };
 
             try {
                 const getTc = params.getTranscodeUrls !== false;
@@ -575,10 +575,10 @@ async function play(params, context) {
                     await OmniBox.log("warn", `[media_library_cloud] addPlayHistory: ${e.message}`);
                 }
 
-                return { urls: urlsResult, flag: shareURL, header, parse: 0, danmaku: danmakuList };
+                return { urls: urlsResult, header, parse: 0, danmaku: danmakuList };
             } catch (e) {
                 await OmniBox.log("error", `[media_library_cloud] play: ${e.message}`);
-                return { urls: [], flag: "", header: {}, parse: 0, danmaku: [] };
+                return { urls: [], header: {}, parse: 0, danmaku: [] };
             }
 
     }

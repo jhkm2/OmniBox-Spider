@@ -2,7 +2,7 @@
 // @author @sifanss
 // @description 必填参数：BASE_URL，XIAOYA_TOKEN。刮削：支持，弹幕：支持，播放记录：支持
 // @dependencies: axios
-// @version 1.1.1
+// @version 1.1.2
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/网盘/AListTvbox.js
 
 // 引入 OmniBox SDK
@@ -722,10 +722,8 @@ async function play(params, context) {
     if (/\.(m3u8|mp4|rmvb|avi|wmv|flv|mkv|webm|mov|m3u|mp3)(?!\w)/i.test(mainPlayId)) {
       return {
         urls: [{ name: "播放", url: mainPlayId }],
-        flag: flag,
         header: {},
-        parse: 0,
-      };
+        parse: 0};
     }
 
     if (isValidUrl(mainPlayId)) {
@@ -870,19 +868,15 @@ async function play(params, context) {
 
     return {
       urls,
-      flag: flag,
       header,
       parse: 0,
-      danmaku: danmakuList,
-    };
+      danmaku: danmakuList};
   } catch (error) {
     OmniBox.log("error", `播放接口失败: ${error.message}`);
     return {
       urls: [],
-      flag: params.flag || "",
       header: {},
-      danmaku: [],
-    };
+      danmaku: []};
   }
 }
 

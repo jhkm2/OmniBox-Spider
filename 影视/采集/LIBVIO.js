@@ -2,7 +2,7 @@
 // @author 梦
 // @description 刮削：已接入，弹幕：已接入，播放记录：已接入，嗅探：不需要（直链优先，支持网盘线路展开）
 // @dependencies
-// @version 1.5.6
+// @version 1.5.7
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/LIBVIO.js
 
 const http = require("http");
@@ -1111,7 +1111,7 @@ function buildProviderIframeUrl(player = {}) {
 }
 
 function emptyPlay(flag = "LIBVIO") {
-    return { parse: 0, flag, urls: [] };
+    return { parse: 0, urls: [] };
 }
 
 function emptyPage(page = 1) {
@@ -1751,16 +1751,13 @@ async function play(params, context) {
                     }
                     return {
                         urls: urlList.map((item) => ({ name: item.name || meta.name || "播放", url: item.url })),
-                        flag: shareURL,
                         header: playInfo?.header || {},
                         parse: 0,
-                        danmaku: danmakuList,
-                    };
+                        danmaku: danmakuList};
                 }
                 logInfo("play 网盘直取失败", { shareURL, fileId, routeType, error: playInfoResult.reason?.message || String(playInfoResult.reason || "") });
                 return {
                     parse: 0,
-                    flag: playFlag,
                     urls: [{ name: meta.name || "网盘资源", url: `push://${shareURL}` }]
                 };
             }
@@ -1781,7 +1778,6 @@ async function play(params, context) {
                     logInfo("play 未找到 player_aaaa", { playPageUrl });
                     return {
                         parse: 1,
-                        flag: playFlag,
                         header: sniffHeaders,
                         urls: [{ name: meta.name || "播放", url: playPageUrl }],
                         danmaku: []
@@ -1794,7 +1790,6 @@ async function play(params, context) {
                     logInfo("play 直链完成", { playPageUrl, from: player.from, finalUrl: realUrl });
                     return {
                         parse: 0,
-                        flag: playFlag,
                         header: sniffHeaders,
                         urls: [{ name: meta.name || "播放", url: realUrl }],
                         danmaku: []
@@ -1813,7 +1808,6 @@ async function play(params, context) {
                         logInfo("play SDK嗅探完成", { playPageUrl, from: player.from, sniffTarget, sniffCount: sniffUrls.length, first: sniffUrls[0] || null });
                         return {
                             parse: 0,
-                            flag: playFlag,
                             header: sniffResult?.header || sniffHeaders,
                             urls: sniffUrls.map((item) => ({ name: item.name || meta.name || "播放", url: item.url })),
                             danmaku: sniffResult?.danmaku || []
@@ -1827,7 +1821,6 @@ async function play(params, context) {
                 logInfo("play 使用嗅探兜底", { playPageUrl, decodedUrl: realUrl, iframeUrl, sniffTarget });
                 return {
                     parse: 1,
-                    flag: playFlag,
                     header: sniffHeaders,
                     urls: [{ name: meta.name || "播放", url: sniffTarget }],
                     danmaku: []

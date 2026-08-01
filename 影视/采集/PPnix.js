@@ -2,7 +2,7 @@
 // @author 梦
 // @description 刮削：暂不支持，弹幕：暂不支持，分类筛选：支持，播放链：兼容 TVBox，优先返回已重写的内联 m3u8 以规避代理链路问题
 // @dependencies: axios, cheerio
-// @version 1.7.3
+// @version 1.7.4
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/PPnix.js
 
 const OmniBox = require("omnibox_sdk");
@@ -739,12 +739,10 @@ async function play(params, context) {
         OmniBox.log("info", `[play] 返回 tvbox 专用内联 m3u8: infoId=${infoId}, param=${param}, from=${from}, leanHeader=${shouldUseLeanHeader ? "yes" : "no"}, cookie=${cfCookie ? "yes" : "no"}, subtitles=${subtitles.length}`);
         return {
           urls: [{ name: episodeName, url: finalUrl }],
-          flag: "PPnix",
           header,
           parse: 0,
           danmaku: [],
-          subtitles,
-        };
+          subtitles};
       } catch (error) {
         OmniBox.log("warn", `[play] tvbox 内联 m3u8 失败，回退原始地址: ${error.message}`);
       }
@@ -758,12 +756,10 @@ async function play(params, context) {
         OmniBox.log("info", `[play] 返回重写 data-url: infoId=${infoId}, param=${param}, from=${from}, leanHeader=${shouldUseLeanHeader ? "yes" : "no"}, cookie=${cfCookie ? "yes" : "no"}, subtitles=${subtitles.length}`);
         return {
           urls: [{ name: episodeName, url: finalUrl }],
-          flag: "PPnix",
           header,
           parse: 0,
           danmaku: [],
-          subtitles,
-        };
+          subtitles};
       } catch (error) {
         OmniBox.log("warn", `[play] 官网链路重写失败，回退原始地址: ${error.message}`);
       }
@@ -772,15 +768,13 @@ async function play(params, context) {
     OmniBox.log("info", `[play] 返回原始 m3u8: infoId=${infoId}, param=${param}, from=${from}, leanHeader=${shouldUseLeanHeader ? "yes" : "no"}, cookie=${cfCookie ? "yes" : "no"}, subtitles=${subtitles.length}`);
     return {
       urls: [{ name: episodeName, url: sourceUrl }],
-      flag: "PPnix",
       header,
       parse: 0,
       danmaku: [],
-      subtitles,
-    };
+      subtitles};
   } catch (error) {
     OmniBox.log("error", `[play] 失败: ${error.message}`);
-    return { urls: [], flag: "PPnix", header: {}, parse: 1, danmaku: [] };
+    return { urls: [], header: {}, parse: 1, danmaku: [] };
   }
 }
 

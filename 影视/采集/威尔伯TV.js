@@ -2,7 +2,7 @@
 // @author 梦
 // @description 刮削：已接入，弹幕：未接入，嗅探：直接返回 play.modujx11.com 直链
 // @dependencies cheerio
-// @version 1.0.8
+// @version 1.0.9
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/openclaw/影视/采集/威尔伯TV.js
 
 const OmniBox = require("omnibox_sdk");
@@ -560,10 +560,8 @@ async function play(params, context) {
     if (!playUrl) return { parse: 0, urls: [] };
     const result = {
       parse: 0,
-      flag: String(params.flag || "威尔伯TV"),
       header: { Referer: HOST, Origin: HOST, "User-Agent": UA },
-      urls: [{ name: String(params.name || "正片"), url: playUrl }],
-    };
+      urls: [{ name: String(params.name || "正片"), url: playUrl }]};
     await log("info", "play 完成", { parse: result.parse, urlCount: result.urls.length, first: result.urls[0] || null });
     return result;
   } catch (e) {

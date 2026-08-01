@@ -2,7 +2,7 @@
 // @author 梦
 // @description 影视站：https://www.zhepianhai.com/ ，支持首页、分类、详情、搜索与播放（直链提取）
 // @dependencies cheerio
-// @version 1.0.0
+// @version 1.0.1
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/这片海.js
 
 const OmniBox = require("omnibox_sdk");
@@ -350,15 +350,13 @@ async function play(params, context) {
     await OmniBox.log("info", `[这片海][play] from=${player?.from || "unknown"}, encrypt=${player?.encrypt || 0}`);
     return {
       urls: [{ name: "播放", url: realUrl }],
-      flag,
       header: {
         Referer: `${BASE_URL}/`,
-        "User-Agent": UA,
+        "User-Agent": UA
       },
-      parse: /\.(m3u8|mp4)(\?|$)/i.test(realUrl) ? 0 : 1,
-    };
+      parse: /\.(m3u8|mp4)(\?|$)/i.test(realUrl) ? 0 : 1};
   } catch (error) {
     await OmniBox.log("error", `[这片海][play] 失败: ${error.message || error}`);
-    return { urls: [], flag: String(params?.flag || "play"), header: {}, parse: 1 };
+    return { urls: [], header: {}, parse: 1 };
   }
 }

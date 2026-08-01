@@ -1,7 +1,7 @@
 // @name 金牌
 // @author 梦
 // @description API 站：https://m.jiabaide.cn，支持首页、分类、搜索、详情与播放解析
-// @version 1.1.3
+// @version 1.1.4
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/金牌.js
 // @dependencies crypto-js
 
@@ -565,12 +565,10 @@ async function play(params, context) {
     return {
       parse: 0,
       urls,
-      flag,
       header,
-      danmaku: danmakuList,
-    };
+      danmaku: danmakuList};
   } catch (e) {
     await OmniBox.log("error", `[金牌][play] ${e.message}`);
-    return { parse: 0, urls: [], flag: String(params.flag || ""), header: {}, danmaku: [] };
+    return { parse: 0, urls: [], header: {}, danmaku: [] };
   }
 }

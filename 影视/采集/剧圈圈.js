@@ -2,7 +2,7 @@
 // @author 梦
 // @description 影视站：支持首页、分类、详情、搜索与播放
 // @dependencies cheerio
-// @version 1.0.0
+// @version 1.0.1
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/剧圈圈.js
 
 const OmniBox = require("omnibox_sdk");
@@ -401,7 +401,7 @@ async function search(params = {}) {
 async function play(params = {}, context = {}) {
   try {
     const playId = absoluteUrl(params.id || params.playId || "");
-    if (!playId) return { parse: 1, url: "", urls: [], header: {}, flag: "jqq" };
+    if (!playId) return { parse: 1, url: "", urls: [], header: {} };
 
     const playPageRes = await requestTextNative(playId, { referer: `${BASE_URL}/` });
     const html = playPageRes.body || "";
@@ -416,9 +416,7 @@ async function play(params = {}, context = {}) {
         url: playId,
         urls: [{ name: "播放页", url: playId }],
         header: { "User-Agent": UA, Referer: `${BASE_URL}/` },
-        headers: { "User-Agent": UA, Referer: `${BASE_URL}/` },
-        flag: "jqq",
-      };
+        headers: { "User-Agent": UA, Referer: `${BASE_URL}/` }};
     }
 
     if (/^https?:\/\/.*\.(m3u8|mp4|flv|m4s)(\?.*)?$/i.test(vid)) {
@@ -428,9 +426,7 @@ async function play(params = {}, context = {}) {
         url: vid,
         urls: [{ name: "播放", url: vid }],
         header: directHeaders,
-        headers: directHeaders,
-        flag: "jqq",
-      };
+        headers: directHeaders};
     }
 
     const playerUrl = `${BASE_URL}/jx/player.php?vid=${encodeURIComponent(vid)}`;
@@ -473,9 +469,7 @@ async function play(params = {}, context = {}) {
         url: realUrl,
         urls: [{ name: "播放", url: realUrl }],
         header: finalHeaders,
-        headers: finalHeaders,
-        flag: "jqq",
-      };
+        headers: finalHeaders};
     }
 
     return {
@@ -483,11 +477,9 @@ async function play(params = {}, context = {}) {
       url: playId,
       urls: [{ name: "播放页", url: playId }],
       header: { "User-Agent": UA, Referer: playerUrl },
-      headers: { "User-Agent": UA, Referer: playerUrl },
-      flag: "jqq",
-    };
+      headers: { "User-Agent": UA, Referer: playerUrl }};
   } catch (e) {
     await OmniBox.log("error", `[剧圈圈][play] ${e.message}`);
-    return { parse: 1, url: "", urls: [], header: {}, flag: "jqq" };
+    return { parse: 1, url: "", urls: [], header: {} };
   }
 }

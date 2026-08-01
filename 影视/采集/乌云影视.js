@@ -2,7 +2,7 @@
 // @author 梦
 // @description 刮削：未接入，弹幕：站内弹幕接口，嗅探：不需要
 // @dependencies
-// @version 1.1.1
+// @version 1.1.2
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/乌云影视.js
 
 const OmniBox = require("omnibox_sdk");
@@ -172,14 +172,12 @@ async function play(params, context) {
     await logInfo(`[play] resolved=${finalUrl}`);
     return {
       parse: 0,
-      flag,
       header: {
         Referer: `${SITE}/`,
         Origin: SITE,
-        "User-Agent": UA,
+        "User-Agent": UA
       },
-      urls: [{ name: payload.name || "播放", url: finalUrl }],
-    };
+      urls: [{ name: payload.name || "播放", url: finalUrl }]};
   } catch (error) {
     await logError(`[play] 失败: ${error.message}`);
     return emptyPlay(String(params?.flag || "乌云影视"));
@@ -534,7 +532,7 @@ function emptyPage(page) {
 }
 
 function emptyPlay(flag) {
-  return { parse: 0, flag, urls: [] };
+  return { parse: 0, urls: [] };
 }
 
 function safeJson(value) {

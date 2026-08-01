@@ -2,7 +2,7 @@
 // @author 梦
 // @description 站点搜索 + 网盘资源解析（夸克/百度/迅雷等），支持网盘目录展开、刮削、弹幕、观看记录
 // @dependencies: axios
-// @version 1.2.4
+// @version 1.2.5
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/网盘/聚盘搜索.js
 
 
@@ -1063,7 +1063,6 @@ async function play(params, context) {
       const url = text(meta.shareURL || "");
       return {
         urls: [{ name: meta.epName || "播放", url }],
-        flag: "raw",
         header: { "User-Agent": UA, "Referer": `${BASE}/` },
         parse: /\.(m3u8|mp4|flv|webm)(\?|$)/i.test(url) ? 0 : 1
       };
@@ -1167,7 +1166,6 @@ async function play(params, context) {
 
     return {
       urls,
-      flag: routeType,
       header: info?.header || { "User-Agent": UA, "Referer": `${BASE}/` },
       parse: 0,
       danmaku: Array.isArray(danmaku) ? danmaku : []
@@ -1176,7 +1174,6 @@ async function play(params, context) {
     await OmniBox.log("error", `[dyuzi] play 异常: ${e.message}`);
     return {
       urls: [],
-      flag: "",
       header: { "User-Agent": UA, "Referer": `${BASE}/` },
       parse: 1,
       danmaku: []

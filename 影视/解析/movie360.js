@@ -1,7 +1,7 @@
 // @name 360影视
 // @author 梦
 // @description 360影视 OmniBox 源；解析接口通过全局环境变量 PARSE_APIS 配置，按顺序循环尝试
-// @version 1.0.2
+// @version 1.0.3
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/解析/movie360.js
 
 const OmniBox = require("omnibox_sdk");
@@ -393,7 +393,6 @@ async function tryParseApi(api, targetUrl, flag) {
   if (json && json.url && (json.parse === 0 || json.jx === 0 || isDirectMediaUrl(json.url))) {
     const result = {
       parse: 0,
-      flag: flag || "play",
       url: json.url,
       urls: [{ name: "播放", url: json.url }],
     };
@@ -411,7 +410,6 @@ async function tryParseApi(api, targetUrl, flag) {
       if (sniffed && sniffed.url) {
         return {
           parse: 0,
-          flag: flag || "play",
           url: sniffed.url,
           urls: [{ name: "播放", url: sniffed.url }],
           header: sniffed.headers || {},
@@ -425,7 +423,6 @@ async function tryParseApi(api, targetUrl, flag) {
 
   return {
     parse: 1,
-    flag: flag || "play",
     url: targetUrl,
     urls: [{ name: "播放页", url: targetUrl }],
     header: {},
@@ -434,11 +431,10 @@ async function tryParseApi(api, targetUrl, flag) {
 }
 
 async function resolvePlay(targetUrl, flag, parserEntry) {
-  if (!targetUrl) return { parse: 0, urls: [], flag: flag || "play", header: {} };
+  if (!targetUrl) return { parse: 0, urls: [], header: {} };
   if (isDirectMediaUrl(targetUrl)) {
     return {
       parse: 0,
-      flag: flag || "play",
       url: targetUrl,
       urls: [{ name: "播放", url: targetUrl }],
       header: {},
@@ -460,7 +456,6 @@ async function resolvePlay(targetUrl, flag, parserEntry) {
 
   return {
     parse: 1,
-    flag: flag || "play",
     url: targetUrl,
     urls: [{ name: "播放页", url: targetUrl }],
     header: {},
@@ -472,7 +467,7 @@ async function play(params, context) {
   try {
     const flag = String(params.flag || "").trim();
     const playId = String(params.playId || params.play_id || "").trim();
-    if (!playId) return { parse: 0, urls: [], flag, header: {} };
+    if (!playId) return { parse: 0, urls: [], header: {} };
 
     if (flag === "智能线路" && playId.includes("|||")) {
       for (const candidate of playId.split("|||").map(s => s.trim()).filter(Boolean)) {
@@ -481,7 +476,7 @@ async function play(params, context) {
         const res = await resolvePlay(candidate, flag);
         if (res?.url || (Array.isArray(res?.urls) && res.urls.length)) return res;
       }
-      return { parse: 1, flag, url: playId.split("|||")[0], urls: [{ name: "播放页", url: playId.split("|||")[0] }] };
+      return { parse: 1, url: playId.split("|||")[0], urls: [{ name: "播放页", url: playId.split("|||")[0] }] };
     }
 
     if (playId.startsWith("{")) {
@@ -494,6 +489,6 @@ async function play(params, context) {
     return await resolvePlay(playId, flag);
   } catch (e) {
     await OmniBox.log("error", `[movie360][play] ${e.message}`);
-    return { parse: 0, urls: [], flag: String(params.flag || "") };
+    return { parse: 0, urls: [] };
   }
 }

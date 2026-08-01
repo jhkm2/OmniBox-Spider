@@ -1,7 +1,7 @@
 // @name 剧迷115
 // @author 梦
 // @description 影视站：gimy115.top，支持首页、分类、搜索、详情与网盘线路提取；支持刮削、弹幕、播放记录；Cookie 支持环境变量配置
-// @version 1.2.0
+// @version 1.2.1
 // @dependencies cheerio
 
 const OmniBox = require("omnibox_sdk");
@@ -925,7 +925,7 @@ async function detail(params, context) {
 async function play(params, context) {
   try {
     const playId = String(params.playId || params.id || params.url || "").trim();
-    if (!playId) return { parse: 0, url: "", urls: [], header: {}, headers: {}, flag: "gimy115" };
+    if (!playId) return { parse: 0, url: "", urls: [], header: {}, headers: {} };
 
     const [mainPlayId, metaPart = ""] = playId.split("|||");
     const playMeta = decodePlayMeta(metaPart);
@@ -1037,9 +1037,7 @@ async function play(params, context) {
           urls,
           header,
           headers: header,
-          flag: String(playInfo?.flag || routeType || "drive"),
-          danmaku: danmakuList,
-        };
+          danmaku: danmakuList};
       }
       throw new Error(`未获取到网盘播放地址: ${shareURL}`);
     }
@@ -1052,9 +1050,7 @@ async function play(params, context) {
         url: deniedUrl,
         urls: [{ name: "权限页", url: deniedUrl }],
         header: getHeaders(deniedUrl),
-        headers: getHeaders(deniedUrl),
-        flag: "denied",
-      };
+        headers: getHeaders(deniedUrl)};
     }
 
     if (playId.startsWith("page|||")) {
@@ -1064,14 +1060,12 @@ async function play(params, context) {
         url: pageUrl,
         urls: [{ name: "详情页", url: pageUrl }],
         header: getHeaders(pageUrl),
-        headers: getHeaders(pageUrl),
-        flag: "page",
-      };
+        headers: getHeaders(pageUrl)};
     }
 
-    return { parse: 0, url: playId, urls: [{ name: "播放", url: playId }], header: {}, headers: {}, flag: "gimy115" };
+    return { parse: 0, url: playId, urls: [{ name: "播放", url: playId }], header: {}, headers: {} };
   } catch (e) {
     await OmniBox.log("error", `[Gimy115][play] ${e.message}`);
-    return { parse: 0, url: "", urls: [], header: {}, headers: {}, flag: "gimy115" };
+    return { parse: 0, url: "", urls: [], header: {}, headers: {} };
   }
 }

@@ -1,5 +1,5 @@
 // @name HDmoli
-// @version 1.0.6
+// @version 1.0.7
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/HDmoli.js
 // @dependencies cheerio
 
@@ -399,10 +399,8 @@ async function play(params, context) {
       await OmniBox.log("info", `[play] direct source=${payload.source} sniff=${sniff} url=${directUrl}`);
       return {
         urls: [{ name: payload.source || "播放", url: directUrl }],
-        flag: params?.flag || payload.source || "play",
         header: {},
-        parse: sniff ? 1 : 0,
-      };
+        parse: sniff ? 1 : 0};
     }
 
     if (payload.sniffUrl) {
@@ -418,10 +416,8 @@ async function play(params, context) {
           await OmniBox.log("info", `[play] sdk sniff success url=${sniffedUrl}`);
           return {
             urls: [{ name: payload.source || "播放", url: sniffedUrl }],
-            flag: params?.flag || payload.source || "play",
             header: sniffed?.header || {},
-            parse: 0,
-          };
+            parse: 0};
         }
       } catch (sniffError) {
         await OmniBox.log("warn", `[play] sdk sniff failed: ${sniffError.message}`);
@@ -429,10 +425,8 @@ async function play(params, context) {
 
       return {
         urls: [{ name: payload.source || "播放", url: payload.sniffUrl }],
-        flag: params?.flag || payload.source || "play",
         header: sniffHeaders,
-        parse: 1,
-      };
+        parse: 1};
     }
 
     if (!payload.playUrl) throw new Error("缺少 playUrl");
@@ -473,10 +467,8 @@ async function play(params, context) {
           await OmniBox.log("info", `[play] sdk sniff success from player page url=${sniffedUrl}`);
           return {
             urls: [{ name: payload.source || player.from || "播放", url: sniffedUrl }],
-            flag: params?.flag || payload.source || player.from || "play",
             header: sniffed?.header || {},
-            parse: 0,
-          };
+            parse: 0};
         }
       } catch (sniffError) {
         await OmniBox.log("warn", `[play] sdk sniff from player page failed: ${sniffError.message}`);
@@ -484,28 +476,22 @@ async function play(params, context) {
 
       return {
         urls: [{ name: payload.source || player.from || "播放", url: payload.playUrl }],
-        flag: params?.flag || payload.source || player.from || "play",
         header: {
           Referer: payload.referer || BASE_URL + "/",
-          "User-Agent": USER_AGENT,
+          "User-Agent": USER_AGENT
         },
-        parse: 1,
-      };
+        parse: 1};
     }
 
     return {
       urls: [{ name: payload.source || player.from || "播放", url: finalUrl }],
-      flag: params?.flag || payload.source || player.from || "play",
       header: finalHeaders,
-      parse: 0,
-    };
+      parse: 0};
   } catch (error) {
     await OmniBox.log("error", `[play] ${error.message}`);
     return {
       urls: [],
-      flag: params?.flag || "play",
       header: {},
-      parse: 0,
-    };
+      parse: 0};
   }
 }

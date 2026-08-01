@@ -2,7 +2,7 @@
 // @author 
 // @description 刮削：支持，弹幕：支持，嗅探：支持，只支持tvbox接口
 // @dependencies: crypto, axios
-// @version 1.5.0
+// @version 1.5.1
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/网盘/盘搜分组.js
 
 /**
@@ -682,7 +682,6 @@ async function rapidTransferPlay(shareURL, fileId, targetDrive, flag, context) {
     const urls = Array.isArray(result.url) ? result.url : (result.url ? [{ name: "播放", url: result.url }] : []);
     return {
         urls: urls.map((item) => ({ name: item.name || "播放", url: item.url })),
-        flag: flag || ("秒传" + targetDrive),
         header: result.header || {},
         parse: 0,
         danmaku: result.danmaku || [],
@@ -2172,11 +2171,9 @@ async function play(params, context) {
             addPlayHistoryAsync({ sourceId: context?.sourceId || "盘搜分组-磁力", vodId: String(params.vodId || playId).trim(), title: String(params.vodName || params.title || episodeName || "磁力资源").trim(), pic: params.pic || "", episode: episodeName, episodeName, episodeNumber: extractEpisodeNumber(episodeName) });
             return {
                 urls: [{ name: episodeName || "磁力资源", url: playId }],
-                flag: flag || "磁力",
                 header: {},
                 parse: 0,
-                danmaku: [],
-            };
+                danmaku: []};
         }
 
         const parts = playId.split("|");
@@ -2302,19 +2299,15 @@ async function play(params, context) {
 
         return {
             urls: urlsResult,
-            flag: shareURL,
             header: header,
             parse: 0,
-            danmaku: finalDanmakuList,
-        };
+            danmaku: finalDanmakuList};
     } catch (error) {
         OmniBox.log("error", `播放接口失败: ${error.message}`);
         return {
             urls: [],
-            flag: params.flag || "",
             header: {},
-            danmaku: [],
-        };
+            danmaku: []};
     }
 }
 

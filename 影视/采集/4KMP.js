@@ -2,7 +2,7 @@
 // @author 梦
 // @description 4kmp.com：支持首页、分类、搜索、详情与直链播放，站点请求使用苹果 Safari UA
 // @dependencies cheerio
-// @version 1.0.0
+// @version 1.0.1
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/4KMP.js
 
 const OmniBox = require("omnibox_sdk");
@@ -498,14 +498,12 @@ async function play(params, context) {
         jx: 0,
         url: direct,
         urls: [{ name: meta.title || "直链", url: direct }],
-        flag: "4kmp",
         header: headers,
-        headers,
-      };
+        headers};
     }
 
     if (!pageUrl) {
-      return { parse: 0, jx: 0, url: "", urls: [], flag: "4kmp", header: {}, headers: {} };
+      return { parse: 0, jx: 0, url: "", urls: [], header: {}, headers: {} };
     }
 
     const html = await fetchText(pageUrl, { referer: `${BASE_URL}/` });
@@ -519,10 +517,8 @@ async function play(params, context) {
         jx: 0,
         url: firstUrl,
         urls: mediaSources.map((item) => ({ name: item.name, url: item.url })),
-        flag: "4kmp",
         header: playHeaders,
-        headers: playHeaders,
-      };
+        headers: playHeaders};
     }
 
     if (typeof OmniBox.sniffVideo === "function") {
@@ -535,10 +531,8 @@ async function play(params, context) {
             jx: 0,
             url: sniffUrl,
             urls: [{ name: meta.title || "嗅探线路", url: sniffUrl }],
-            flag: "4kmp",
             header: sniffed.header || sniffed.headers || headers,
-            headers: sniffed.header || sniffed.headers || headers,
-          };
+            headers: sniffed.header || sniffed.headers || headers};
         }
       } catch (error) {
         await OmniBox.log("warn", `[4KMP][play] sniffVideo failed: ${error.message}`);
@@ -550,12 +544,10 @@ async function play(params, context) {
       jx: 1,
       url: pageUrl,
       urls: [{ name: meta.title || "播放页", url: pageUrl }],
-      flag: "4kmp",
       header: headers,
-      headers,
-    };
+      headers};
   } catch (error) {
     await OmniBox.log("error", `[4KMP][play] ${error.message}`);
-    return { parse: 0, jx: 0, url: "", urls: [], flag: "4kmp", header: {}, headers: {} };
+    return { parse: 0, jx: 0, url: "", urls: [], header: {}, headers: {} };
   }
 }

@@ -1,6 +1,6 @@
 // @name 听友FM
 // @author OmniBox助手
-// @version 1.0.5
+// @version 1.0.6
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/听书/听友FM.js
 // @dependencies axios,cheerio,@noble/ciphers
 // notes:
@@ -907,7 +907,6 @@ async function play(params, context) {
         if (playUrl) {
           const out = {
             urls: [{ name: `直链 ${chapterIdx}`, url: playUrl }],
-            flag: "play",
             parse: 0,
             header: getHeaders({ ...(auth ? { Authorization: auth } : {}), ...(cookie ? { Cookie: cookie } : {}) })
           };
@@ -929,12 +928,11 @@ async function play(params, context) {
         log("info", `play.fallback.sniff.result ${j(sniffed).slice(0, 1200)}`);
         if (sniffed) {
           if (typeof sniffed === "string") {
-            return { urls: [{ name: `嗅探 ${chapterIdx}`, url: sniffed }], flag: "play", parse: 0, header: getHeaders() };
+            return { urls: [{ name: `嗅探 ${chapterIdx}`, url: sniffed }], parse: 0, header: getHeaders() };
           }
           if (sniffed.url) {
             return {
               urls: [{ name: `嗅探 ${chapterIdx}`, url: sniffed.url }],
-              flag: sniffed.flag || "play",
               parse: sniffed.parse ?? 0,
               header: sniffed.headers || sniffed.header || getHeaders()
             };
@@ -942,7 +940,6 @@ async function play(params, context) {
           if (Array.isArray(sniffed.urls) && sniffed.urls.length) {
             return {
               urls: sniffed.urls,
-              flag: sniffed.flag || "play",
               parse: sniffed.parse ?? 0,
               header: sniffed.headers || sniffed.header || getHeaders()
             };
@@ -957,7 +954,6 @@ async function play(params, context) {
 
     const out = {
       urls: [{ name: `播放页 ${chapterIdx}`, url: audioPage }],
-      flag: "play",
       parse: 1,
       header: getHeaders()
     };
@@ -965,7 +961,7 @@ async function play(params, context) {
     return out;
   } catch (e) {
     log("error", `play.error message=${e.message} stack=${e.stack || ""}`);
-    return { urls: [], flag: "play", parse: 1 };
+    return { urls: [], parse: 1 };
   }
 }
 

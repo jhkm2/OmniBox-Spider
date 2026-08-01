@@ -1,7 +1,7 @@
 // @name 4K指南
 // @author 梦
-// @description 网盘资源站：https://4kzn.com ，支持首页、分类、详情、搜索、网盘播放、刮削、弹幕、播放记录
-// @version 1.2.1
+// @description 网盘资源站：https://4kzn.cc ，支持首页、分类、详情、搜索、网盘播放、刮削、弹幕、播放记录
+// @version 1.2.3
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/网盘/4K指南.js
 // @dependencies cheerio
 
@@ -9,7 +9,7 @@ const OmniBox = require("omnibox_sdk");
 const runner = require("spider_runner");
 const cheerio = require("cheerio");
 
-const HOST = process.env.K4ZN_HOST || "https://4kzn.com";
+const HOST = process.env.K4ZN_HOST || "https://4kzn.cc";
 const UA = process.env.K4ZN_UA || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 const HEADERS = {
   "User-Agent": UA,
@@ -616,18 +616,18 @@ async function play(params, context) {
     const flag = String(params.flag || "").trim();
     const source = resolveCallerSource(params, context);
 
-    if (!playId) return { parse: 0, jx: 0, url: "", urls: [], header: {}, headers: {}, flag: "4kzn" };
+    if (!playId) return { parse: 0, jx: 0, url: "", urls: [], header: {}, headers: {} };
 
     if (playId.startsWith("page|||")) {
       const pageUrl = decodeURIComponent(playId.slice("page|||".length));
       const header = { ...HEADERS, Referer: pageUrl };
-      return { parse: 1, jx: 0, url: pageUrl, urls: [{ name: "详情页", url: pageUrl }], header, headers: header, flag: "page" };
+      return { parse: 1, jx: 0, url: pageUrl, urls: [{ name: "详情页", url: pageUrl }], header, headers: header };
     }
 
     if (playId.startsWith("share|||")) {
       const shareUrl = decodeURIComponent(playId.slice("share|||".length));
       const header = { ...HEADERS, Referer: `${HOST}/` };
-      return { parse: 1, jx: 0, url: shareUrl, urls: [{ name: "打开网盘", url: shareUrl }], header, headers: header, flag: "share" };
+      return { parse: 1, jx: 0, url: shareUrl, urls: [{ name: "打开网盘", url: shareUrl }], header, headers: header };
     }
 
     const idParts = playId.split("|");
@@ -652,7 +652,7 @@ async function play(params, context) {
 
     if (!fileId) {
       const header = { ...HEADERS, Referer: `${HOST}/` };
-      return { parse: 1, jx: 0, url: shareURL, urls: [{ name: "打开网盘", url: shareURL }], header, headers: header, flag: shareURL };
+      return { parse: 1, jx: 0, url: shareURL, urls: [{ name: "打开网盘", url: shareURL }], header, headers: header };
     }
 
     const metadataPromise = (async () => {
@@ -773,14 +773,12 @@ async function play(params, context) {
 
     return {
       urls,
-      flag: shareURL,
       header,
       parse: 0,
       jx: 0,
-      danmaku: danmakuList,
-    };
+      danmaku: danmakuList};
   } catch (e) {
     await OmniBox.log("error", `[4K指南][play] ${e.message}`);
-    return { parse: 0, jx: 0, url: "", urls: [], header: {}, headers: {}, flag: "4kzn" };
+    return { parse: 0, jx: 0, url: "", urls: [], header: {}, headers: {} };
   }
 }

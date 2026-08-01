@@ -2,18 +2,17 @@
 // @author Monica
 // @description 刮削：支持，弹幕：支持，嗅探：支持
 // @dependencies: cheerio, crypto-js
-// @version 1.1.1
+// @version 1.1.2
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/新韩剧网.js
 
 const OmniBox = require("omnibox_sdk");
 const cheerio = require("cheerio");
 const CryptoJS = require("crypto-js");
-const https = require("https");
 
 const hanjuConfig = {
-    host: "https://www.hanju7.com",
+    host: "https://www.9hanju.com",
     headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
         "Referer": "https://www.hanju7.com/",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "zh-CN,zh;q=0.9",
@@ -25,7 +24,6 @@ const hanjuConfig = {
 };
 
 const DEFAULT_PIC = "https://youke2.picui.cn/s1/2025/12/21/694796745c0c6.png";
-const httpsAgent = new https.Agent({ keepAlive: true });
 const DANMU_API = process.env.DANMU_API || "";
 
 // ==========================================================================
@@ -227,6 +225,56 @@ const getCleanText = (el) => {
     return text.trim();
 };
 
+const normalizePic = (pic) => {
+    const value = String(pic || "").trim();
+    if (!value) return "";
+    if (value.startsWith("//")) return `https:${value}`;
+    if (/^https?:\/\//i.test(value)) return value;
+    try { return new URL(value, hanjuConfig.host).toString(); }
+    catch { return value; }
+};
+
+const getPicFromDetail = async (id) => {
+    try {
+        const detailUrl = /^https?:\/\//i.test(String(id || "")) ? String(id) : `${hanjuConfig.host}${id}`;
+        const $ = await fetchHtml(detailUrl);
+        const pic = $("div.detail div.pic img").attr("data-original") || $("div.detail div.pic img").attr("src") || "";
+        return normalizePic(pic) || DEFAULT_PIC;
+    } catch (error) {
+        logInfo(`详情封面获取失败: ${id}: ${error.message}`);
+        return DEFAULT_PIC;
+    }
+};
+
+const mapWithConcurrency = async (items, limit, mapper) => {
+    const values = Array.from(items || []);
+    const results = new Array(values.length);
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(Math.max(1, limit), values.length) }, async () => {
+        while (cursor < values.length) {
+            const index = cursor++;
+            results[index] = await mapper(values[index], index);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+};
+
+const normalizeSniffUrls = (result, defaultName = "嗅探线路") => {
+    const urls = [];
+    const seen = new Set();
+    const append = (item) => {
+        const value = typeof item === "string" ? item : (item?.url || item?.playUrl || item?.src || "");
+        const url = String(value || "").trim();
+        if (!url || seen.has(url)) return;
+        seen.add(url);
+        urls.push({ name: String(item?.name || defaultName), url });
+    };
+    if (Array.isArray(result?.urls)) result.urls.forEach(append);
+    if (!urls.length) append(result);
+    return urls;
+};
+
 async function home(params) {
     try {
         logInfo("进入首页");
@@ -239,7 +287,7 @@ async function home(params) {
                 list.push({
                     vod_id: href,
                     vod_name: getCleanText(a) || a.attr("title"),
-                    vod_pic: a.attr("data-original"),
+                    vod_pic: normalizePic(a.attr("data-original")) || DEFAULT_PIC,
                     vod_remarks: $(el).find("span").first().text() || ""
                 });
             }
@@ -258,150 +306,103 @@ async function category(params) {
 
     try {
         logInfo(`请求分类: ${tid}, 页码: ${pg}`);
-        let url;
-        if (['hot', 'new'].includes(tid)) {
-            url = `${hanjuConfig.host}/${tid}.html`;
-            const $ = await fetchHtml(url);
-            
+        if (["hot", "new"].includes(tid)) {
+            const $ = await fetchHtml(`${hanjuConfig.host}/${tid}.html`);
             const allItems = $("div.txt ul li, div.list_txt ul li").get();
             const pageSize = 20;
             const total = allItems.length;
-            const pageCount = Math.ceil(total / pageSize) || 1;
-            
-            const start = (pg - 1) * pageSize;
-            const end = start + pageSize;
-            const pageItems = allItems.slice(start, end);
-
-            const list = [];
-            pageItems.forEach((el) => {
-                const a = $(el).find("a");
+            const pageCount = Math.max(1, Math.ceil(total / pageSize));
+            const pageItems = allItems.slice((pg - 1) * pageSize, pg * pageSize);
+            const list = await mapWithConcurrency(pageItems, 5, async (el) => {
+                const a = $(el).find("a").first();
                 const href = a.attr("href");
-                if (href) {
-                    list.push({
-                        vod_id: href,
-                        vod_name: getCleanText(a) || a.attr("title"),
-                        vod_pic: `https://pics.hanju7.com/pics/${href.replace('/detail/', '').replace('.html', '.jpg')}`,
-                        vod_remarks: $(el).find("span").first().text() || ""
-                    });
-                }
+                if (!href) return null;
+                return {
+                    vod_id: href,
+                    vod_name: getCleanText(a) || a.attr("title") || "",
+                    vod_pic: await getPicFromDetail(href),
+                    vod_remarks: $(el).find("#actor, span").first().text().trim(),
+                };
             });
-            logInfo(`分类 ${tid} 第 ${pg} 页获取到 ${list.length} 个项目`);
-            return { list, page: pg, pagecount: pageCount, limit: pageSize, total };
-        } else {
-            const pageParam = pg === 1 ? '' : (pg - 1);
-            url = `${hanjuConfig.host}/list/${tid}---${pageParam}.html`;
-            const $ = await fetchHtml(url);
-            
-            const list = [];
-            $("div.list ul li").each((_, el) => {
-                const a = $(el).find("a.tu");
-                let pic = a.attr("data-original") || "";
-                if (pic && !pic.startsWith("http")) pic = "https:" + pic;
-                
-                list.push({
-                    vod_id: a.attr("href"),
-                    vod_name: a.attr("title"),
-                    vod_pic: pic || `https://pics.hanju7.com/pics/${a.attr("href").replace('/detail/', '').replace('.html', '.jpg')}`,
-                    vod_remarks: $(el).find("span.tip").text()
-                });
-            });
-            logInfo(`分类 ${tid} 第 ${pg} 页获取到 ${list.length} 个项目`);
-            return { list, page: pg, pagecount: 99, limit: list.length, total: 9999 };
+            const filtered = list.filter(Boolean);
+            logInfo(`分类 ${tid} 第 ${pg} 页获取到 ${filtered.length} 个项目`);
+            return { list: filtered, page: pg, pagecount: pageCount, limit: pageSize, total };
         }
+
+        const $ = await fetchHtml(`${hanjuConfig.host}/list/${tid}---${pg - 1}.html`);
+        const list = [];
+        $("div.list ul li").each((_, el) => {
+            const a = $(el).find("a.tu").first();
+            const href = a.attr("href");
+            if (!href) return;
+            list.push({
+                vod_id: href,
+                vod_name: a.attr("title") || getCleanText(a),
+                vod_pic: normalizePic(a.attr("data-original")) || DEFAULT_PIC,
+                vod_remarks: $(el).find("span.tip").text().trim(),
+            });
+        });
+        logInfo(`分类 ${tid} 第 ${pg} 页获取到 ${list.length} 个项目`);
+        return { list, page: pg, pagecount: 100, limit: list.length, total: 9999 };
     } catch (e) {
         logError("分类请求失败", e);
-        return { list: [], page: pg, pagecount: pg };
+        return { list: [], page: pg, pagecount: pg, limit: 0, total: 0 };
     }
 }
 
-const doNativePostSearch = (keyword) => {
-    return new Promise((resolve, reject) => {
-        const data = `show=searchkey&keyboard=${encodeURIComponent(keyword)}`;
-        const options = {
-            hostname: 'www.hanju7.com',
-            port: 443,
-            path: '/search/',
-            method: 'POST',
-            agent: httpsAgent,
-            headers: {
-                ...hanjuConfig.headers,
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Content-Length': Buffer.byteLength(data)
-            }
-        };
-
-        const req = https.request(options, (res) => {
-            const result = {
-                statusCode: res.statusCode,
-                location: res.headers.location || res.headers.Location,
-                cookie: res.headers['set-cookie'] || res.headers['Set-Cookie']
-            };
-            res.destroy(); 
-            resolve(result);
-        });
-
-        req.on('error', (e) => reject(e));
-        req.write(data);
-        req.end();
-    });
-};
-
 async function search(params) {
     const keyword = params.keyword || params.wd || "";
-    if (!keyword) return { list: [] };
+    if (!keyword) return { list: [], page: 1, pagecount: 0, total: 0 };
 
     try {
         logInfo(`搜索关键词: ${keyword}`);
-        const postRes = await doNativePostSearch(keyword);
-
-        let redirectUrl = postRes.location;
-        if (!redirectUrl) return { list: [] };
-
-        if (!redirectUrl.startsWith('http')) {
-            if (redirectUrl.startsWith('/')) {
-                redirectUrl = `${hanjuConfig.host}${redirectUrl}`;
-            } else {
-                redirectUrl = `${hanjuConfig.host}/search/${redirectUrl}`;
-            }
-        }
-
-        const nextHeaders = { ...hanjuConfig.headers };
-        if (postRes.cookie) {
-            nextHeaders['Cookie'] = Array.isArray(postRes.cookie) ? postRes.cookie.join('; ') : postRes.cookie;
-        }
-
-        const redirectRes = await OmniBox.request(redirectUrl, {
-            method: "GET",
-            headers: nextHeaders,
-            timeout: 10000,
-            gzip: true
+        const formData = `show=searchkey&keyboard=${encodeURIComponent(keyword)}`;
+        let searchRes = await OmniBox.request(`${hanjuConfig.host}/search/`, {
+            method: "POST",
+            headers: {
+                ...hanjuConfig.headers,
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: formData,
+            timeout: 15000,
+            gzip: true,
         });
 
-        const $ = cheerio.load(redirectRes.body);
-        const list = [];
-        
-        $("div.txt ul li").each((_, el) => {
-            if ($(el).attr("id") === "t") return; 
-            
-            const a = $(el).find("p#name a");
+        if (Number(searchRes?.statusCode) >= 300 && Number(searchRes?.statusCode) < 400) {
+            const location = searchRes?.headers?.location || searchRes?.headers?.Location || "";
+            if (!location) return { list: [], page: 1, pagecount: 0, total: 0 };
+            const redirectUrl = new URL(location, `${hanjuConfig.host}/search/`).toString();
+            const redirectHeaders = { ...hanjuConfig.headers };
+            const cookie = searchRes?.headers?.["set-cookie"] || searchRes?.headers?.["Set-Cookie"];
+            if (cookie) redirectHeaders.Cookie = Array.isArray(cookie) ? cookie.join("; ") : String(cookie);
+            searchRes = await OmniBox.request(redirectUrl, {
+                method: "GET",
+                headers: redirectHeaders,
+                timeout: 15000,
+                gzip: true,
+            });
+        }
+
+        if (Number(searchRes?.statusCode || 200) !== 200) throw new Error(`HTTP ${searchRes?.statusCode || "unknown"}`);
+        const $ = cheerio.load(searchRes.body || "");
+        const items = $("div.txt ul li").filter((_, el) => $(el).attr("id") !== "t").get();
+        const list = await mapWithConcurrency(items, 5, async (el) => {
+            const a = $(el).find("p#name a, a").first();
             const href = a.attr("href");
-            if (href) {
-                let name = a.text().trim();
-                name = name.replace(/\(\d+\)$/, ""); 
-                
-                list.push({
-                    vod_id: href,
-                    vod_name: name,
-                    vod_pic: DEFAULT_PIC,
-                    vod_remarks: $(el).find("p#actor").text().trim()
-                });
-            }
+            if (!href) return null;
+            return {
+                vod_id: href,
+                vod_name: a.text().trim().replace(/\(\d+\)$/, ""),
+                vod_pic: await getPicFromDetail(href),
+                vod_remarks: $(el).find("p#actor, #actor").first().text().trim(),
+            };
         });
-        logInfo(`搜索 "${keyword}" 找到 ${list.length} 个结果`);
-        return { list, page: 1, pagecount: 1, total: list.length };
+        const filtered = list.filter(Boolean);
+        logInfo(`搜索 "${keyword}" 找到 ${filtered.length} 个结果`);
+        return { list: filtered, page: 1, pagecount: 1, total: filtered.length };
     } catch (e) {
         logError("搜索失败", e);
-        return { list: [] };
+        return { list: [], page: 1, pagecount: 0, total: 0 };
     }
 }
 
@@ -540,23 +541,23 @@ async function play(params) {
     let vodName = "";
     let episodeName = "";
 
-    if (rawPlayIdParam && rawPlayIdParam.includes('|||')) {
-        const parts = rawPlayIdParam.split('|||');
-        playId = parts[0]; 
+    if (rawPlayIdParam && rawPlayIdParam.includes("|||")) {
+        const parts = rawPlayIdParam.split("|||");
+        playId = parts[0];
         playMeta = decodeMeta(parts[1] || "");
         vodName = playMeta.v || "";
         episodeName = playMeta.e || "";
     }
+    if (!playId) return { parse: 0, url: "", urls: [], header: {}, headers: {} };
 
     logInfo(`准备播放 ID: ${playId}`);
-
     let scrapedDanmuFileName = "";
     let scrapeType = "";
     try {
         const videoIdForScrape = vodId || (playMeta?.sid ? String(playMeta.sid) : "");
         if (videoIdForScrape) {
             const metadata = await OmniBox.getScrapeMetadata(videoIdForScrape);
-            if (metadata && metadata.scrapeData) {
+            if (metadata?.scrapeData) {
                 const mapping = (metadata.videoMappings || []).find((m) => m?.fileId === playMeta?.fid);
                 if (metadata.scrapeData.title) vodName = metadata.scrapeData.title;
                 if (mapping?.episodeName) episodeName = mapping.episodeName;
@@ -569,45 +570,60 @@ async function play(params) {
     }
 
     try {
-        const res = await OmniBox.request(`${hanjuConfig.host}/u/u1.php?ud=${playId}`, { 
+        const res = await OmniBox.request(`${hanjuConfig.host}/u/u1.php?ud=${encodeURIComponent(playId)}`, {
             headers: hanjuConfig.headers,
-            timeout: 10000,
-            gzip: true
+            timeout: 15000,
+            gzip: true,
         });
-        
+        if (Number(res?.statusCode || 200) !== 200) throw new Error(`HTTP ${res?.statusCode || "unknown"}`);
+
         const key = CryptoJS.enc.Utf8.parse("my-to-newhan-2025\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0");
-        const base64Data = CryptoJS.enc.Base64.parse(res.body);
+        const base64Data = CryptoJS.enc.Base64.parse(String(res.body || "").trim());
         const iv = CryptoJS.lib.WordArray.create(base64Data.words.slice(0, 4));
         const ciphertext = CryptoJS.lib.WordArray.create(base64Data.words.slice(4));
-        
         const decrypted = CryptoJS.AES.decrypt(
-            { ciphertext: ciphertext },
+            { ciphertext },
             key,
-            { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+            { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 },
         );
         const realUrl = decrypted.toString(CryptoJS.enc.Utf8).trim();
-        const isDirectPlayable = realUrl.match(/\.(m3u8|mp4|flv|avi|mkv|ts)/i);
-        let playResponse;
+        if (!realUrl) throw new Error("播放地址解密为空");
 
-        if (isDirectPlayable) {
+        let playResponse;
+        if (/\.(?:m3u8|mp4|flv|avi|mkv|ts)(?:$|[?#])/i.test(realUrl)) {
             playResponse = {
-                urls: [{ name: "直接播放", url: realUrl }],
                 parse: 0,
-                header: hanjuConfig.headers
+                jx: 0,
+                url: realUrl,
+                urls: [{ name: "直接播放", url: realUrl }],
+                header: hanjuConfig.headers,
+                headers: hanjuConfig.headers,
             };
         } else {
-            const sniffed = await OmniBox.sniffVideo(realUrl);
-            if (sniffed && sniffed.url) {
+            let sniffed = null;
+            if (typeof OmniBox.sniffVideo === "function") {
+                try { sniffed = await OmniBox.sniffVideo(realUrl, hanjuConfig.headers); }
+                catch (error) { logInfo(`服务端嗅探失败: ${error.message}`); }
+            }
+            const sniffUrls = normalizeSniffUrls(sniffed);
+            if (sniffUrls.length) {
+                const header = sniffed?.header || sniffed?.headers || hanjuConfig.headers;
                 playResponse = {
-                    urls: [{ name: "嗅探线路", url: sniffed.url }],
                     parse: 0,
-                    header: sniffed.header || hanjuConfig.headers
+                    jx: 0,
+                    url: sniffUrls[0].url,
+                    urls: sniffUrls,
+                    header,
+                    headers: header,
                 };
             } else {
                 playResponse = {
-                    urls: [{ name: "默认线路", url: realUrl }],
-                    parse: 0,
-                    header: hanjuConfig.headers
+                    parse: 1,
+                    jx: 1,
+                    url: realUrl,
+                    urls: [{ name: "浏览器嗅探", url: realUrl }],
+                    header: hanjuConfig.headers,
+                    headers: hanjuConfig.headers,
                 };
             }
         }
@@ -615,20 +631,13 @@ async function play(params) {
         if (DANMU_API && (vodName || params.vodName)) {
             const fallbackFileName = buildFileNameForDanmu(vodName || params.vodName || "", episodeName);
             const danmuFileName = scrapedDanmuFileName || fallbackFileName;
-            logInfo(`尝试匹配弹幕文件名: ${danmuFileName}`);
             const danmakuList = await matchDanmu(danmuFileName);
-            if (danmakuList.length > 0) {
-                playResponse.danmaku = danmakuList;
-                logInfo("弹幕已添加到播放响应");
-            }
-        } else if (!DANMU_API) {
-            logInfo("DANMU_API 未配置，跳过弹幕匹配");
+            if (danmakuList.length) playResponse.danmaku = danmakuList;
         }
-
         return playResponse;
     } catch (e) {
         logError("解析播放失败", e);
-        return { urls: [], parse: 0, header: {} };
+        return { parse: 0, jx: 0, url: "", urls: [], header: {}, headers: {} };
     }
 }
 

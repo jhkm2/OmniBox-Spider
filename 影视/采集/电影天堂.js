@@ -1,7 +1,7 @@
 // @name 电影天堂
 // @author 
 // @description 刮削：支持，弹幕：支持，嗅探：支持
-// @version 1.0.5
+// @version 1.0.6
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/电影天堂.js
 const OmniBox = require("omnibox_sdk");
 
@@ -1170,7 +1170,7 @@ async function play(params) {
         }
 
         let urlsResult = [{ name: "播放", url: resolvedUrl }];
-        let playResponse = { urls: urlsResult, flag: flag, header: resolvedHeader, parse: parse };
+        let playResponse = { urls: urlsResult, header: resolvedHeader, parse: parse };
         if (DANMU_API) {
             let fileName = "";
             if (vodName) {
@@ -1230,6 +1230,6 @@ async function play(params) {
         return playResponse;
     } catch (error) {
         OmniBox.log("error", `获取播放地址失败: ${error.message}`);
-        return { urls: [], flag: params.flag || "", header: {} };
+        return { urls: [], header: {} };
     }
 }

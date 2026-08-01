@@ -1,7 +1,7 @@
 // @name 光鸭·臻影社
 // @author 梦
-// @description 网盘资源站：https://guangya.qsxy.top ，支持首页、分类、搜索、详情、分类筛选排序、评论解锁与每日自动签到；Cookie 支持环境变量配置；可选使用光鸭云盘授权播放
-// @version 1.3.0
+// @description 网盘资源站：https://www.guangya.net ，支持首页、分类、搜索、详情、分类筛选排序、评论解锁与每日自动签到；Cookie 支持环境变量配置；可选使用光鸭云盘授权播放
+// @version 1.3.2
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/网盘/光鸭·臻影社.js
 // @dependencies axios,cheerio
 
@@ -10,7 +10,7 @@ const OmniBox = require("omnibox_sdk");
 const runner = require("spider_runner");
 const cheerio = require("cheerio");
 
-const HOST = trimTrailingSlash(process.env.GUANGYA_HOST || "https://guangya.qsxy.top");
+const HOST = trimTrailingSlash(process.env.GUANGYA_HOST || "https://www.guangya.net");
 const PAN_HOST = trimTrailingSlash(process.env.GUANGYAPAN_HOST || "https://www.guangyapan.com");
 const PAN_API = trimTrailingSlash(process.env.GUANGYAPAN_API || "https://api.guangyapan.com");
 const SITE_COOKIE = String(process.env.GUANGYA_COOKIE || "").trim();
@@ -595,7 +595,7 @@ function buildVodItem({ id, title, pic, remarks = "", content = "" }) {
 
 function extractPostsCards($) {
   const list = [];
-  $("posts.posts-item.list.ajax-item.flex, .posts-item.list.ajax-item.flex").each((_, el) => {
+  $("posts.posts-item, .posts-item.ajax-item, .posts-item.card, .posts-item.list.ajax-item.flex").each((_, el) => {
     const card = $(el);
     const linkEl = card.find("h2.item-heading a").first();
     const href = absUrl(linkEl.attr("href") || card.find("a[href$='.html']").first().attr("href") || "", HOST);
@@ -1376,7 +1376,7 @@ async function detail(params, context) {
 async function play(params, context) {
   try {
     const playId = String(params.playId || params.id || params.url || "").trim();
-    if (!playId) return { parse: 0, url: "", urls: [], header: {}, headers: {}, flag: "guangya" };
+    if (!playId) return { parse: 0, url: "", urls: [], header: {}, headers: {} };
 
     if (playId.startsWith("page|||")) {
       const pageUrl = decodeURIComponent(playId.slice("page|||".length));
@@ -1387,9 +1387,7 @@ async function play(params, context) {
         url: pageUrl,
         urls: [{ name: "打开详情页", url: pageUrl }],
         header,
-        headers: header,
-        flag: "guangya-page",
-      };
+        headers: header};
     }
 
     if (playId.startsWith("share|||")) {
@@ -1401,9 +1399,7 @@ async function play(params, context) {
         url: shareUrl,
         urls: [{ name: "打开分享页", url: shareUrl }],
         header,
-        headers: header,
-        flag: "guangya-share",
-      };
+        headers: header};
     }
 
     const meta = parseSharePlayId(playId);
@@ -1423,9 +1419,8 @@ async function play(params, context) {
         url: downloadUrl,
         urls: [{ name: meta.episodeName || meta.fileName || "播放", url: downloadUrl }],
         header: {},
-        headers: {},
-        flag: "guangya-share-download",
-      };
+        headers: {}
+  };
     } catch (error) {
       await OmniBox.log("warn", `[光鸭][play] 免登录下载失败: ${error.message}`);
     }
@@ -1439,9 +1434,8 @@ async function play(params, context) {
         url: playUrl,
         urls: [{ name: meta.episodeName || meta.fileName || "播放", url: playUrl }],
         header: {},
-        headers: {},
-        flag: "guangya-pan-auth",
-      };
+        headers: {}
+  };
     } catch (error) {
       await OmniBox.log("warn", `[光鸭][play] 授权播放失败: ${error.message}`);
     }
@@ -1453,9 +1447,7 @@ async function play(params, context) {
       url: shareUrl,
       urls: [{ name: meta.episodeName || meta.fileName || "打开分享页", url: shareUrl }],
       header: sharePageHeader,
-      headers: sharePageHeader,
-      flag: "guangya-share-fallback",
-    };
+      headers: sharePageHeader};
   } catch (error) {
     await OmniBox.log("error", `[光鸭][play] ${error.message}`);
     return {
@@ -1464,8 +1456,7 @@ async function play(params, context) {
       url: "",
       urls: [],
       header: {},
-      headers: {},
-      flag: "guangya-error",
-    };
+      headers: {}
+  };
   }
 }

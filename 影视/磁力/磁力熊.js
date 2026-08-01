@@ -2,7 +2,7 @@
 // @author 梦
 // @description 磁力资源站：支持首页、分类、详情、搜索与磁力/电驴/种子线路整理
 // @dependencies cheerio
-// @version 1.0.1
+// @version 1.0.2
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/磁力/磁力熊.js
 
 const OmniBox = require("omnibox_sdk");
@@ -416,12 +416,10 @@ async function play(params = {}) {
     await OmniBox.log("info", `[磁力熊][play] type=${seedType} urls=${urls.length}`);
     return {
       parse: 0,
-      flag: seedType,
       header: {},
-      urls,
-    };
+      urls};
   } catch (error) {
     await OmniBox.log("error", `[磁力熊][play] ${error.message}`);
-    return { parse: 0, flag: "magnet", header: {}, urls: [] };
+    return { parse: 0, header: {}, urls: [] };
   }
 }

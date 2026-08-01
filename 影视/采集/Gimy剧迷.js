@@ -2,7 +2,7 @@
 // @author 梦
 // @description 影视站：Gimy / gimy.now / gimyai.tw，支持首页、分类、详情、搜索与播放页嗅探
 // @dependencies cheerio,@types/opencc-js
-// @version 1.2.5
+// @version 1.2.6
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/Gimy剧迷.js
 
 const OmniBox = require("omnibox_sdk");
@@ -543,7 +543,7 @@ async function search(params, context) {
 async function play(params, context) {
   try {
     const playId = String(params.playId || params.id || params.url || "").trim();
-    if (!playId) return { parse: 0, urls: [], url: "", flag: "gimy", header: {}, headers: {} };
+    if (!playId) return { parse: 0, urls: [], url: "", header: {}, headers: {} };
 
     const pageUrl = /^https?:\/\//i.test(playId) ? playId : absUrl(playId);
     const baseHeaders = { "User-Agent": UA, "Referer": pageUrl, "Origin": BASE_URL };
@@ -604,9 +604,7 @@ async function play(params, context) {
             url: mediaUrl,
             urls: [{ name: toDisplayText(playFrom) || "直链播放", url: mediaUrl }],
             header,
-            headers: header,
-            flag: mediaType || playFrom || "direct",
-          };
+            headers: header};
         }
       } catch (e) {
         await OmniBox.log("warn", `[Gimy剧迷][play] parse.php failed: ${e.message}`);
@@ -623,9 +621,7 @@ async function play(params, context) {
           url: sniffed.url,
           urls: [{ name: "嗅探播放", url: sniffed.url }],
           header,
-          headers: header,
-          flag: "sniff",
-        };
+          headers: header};
       }
     } catch (e) {
       await OmniBox.log("warn", `[Gimy剧迷][play] sniffVideo failed: ${e.message}`);
@@ -636,11 +632,9 @@ async function play(params, context) {
       url: pageUrl,
       urls: [{ name: "播放页", url: pageUrl }],
       header: baseHeaders,
-      headers: baseHeaders,
-      flag: "page",
-    };
+      headers: baseHeaders};
   } catch (e) {
     await OmniBox.log("error", `[Gimy剧迷][play] ${e.message}`);
-    return { parse: 0, urls: [], url: "", flag: "gimy", header: {}, headers: {} };
+    return { parse: 0, urls: [], url: "", header: {}, headers: {} };
   }
 }

@@ -1,5 +1,5 @@
 // @name 星星短剧 ᵈᶻ[短]
-// @version 1.0.3
+// @version 1.0.4
 // @push 0
 // @dependencies axios
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/短剧/星星短剧.js
@@ -147,13 +147,12 @@ async function play(params, context) {
     if (!playId) throw new Error("playId 为空");
     return {
       urls: [{ name: "播放", url: playId }],
-      flag,
       header: { "User-Agent": UA },
       parse: 0
     };
   } catch (e) {
     await OmniBox.log("error", `[play] ${e.message}`);
-    return { url: "", flag: text(params?.flag || "短剧专线"), header: {} };
+    return { url: "", header: {} };
   }
 }
 

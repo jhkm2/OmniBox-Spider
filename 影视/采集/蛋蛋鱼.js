@@ -1,7 +1,7 @@
 // @name 蛋蛋鱼
 // @author 梦
 // @description 页面解析：首页/分类/详情已接入；搜索直接走 ymck 聚合兜底；播放优先解析 yuplayer 接口并还原真实直链，失败时再回退 SDK 嗅探
-// @version 1.4.2
+// @version 1.4.3
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/蛋蛋鱼.js
 // @dependencies axios,cheerio
 
@@ -442,7 +442,6 @@ async function play(params) {
     if (sniffed && Array.isArray(sniffed.urls) && sniffed.urls.length) {
       return {
         urls: sniffed.urls,
-        flag: sniffed.flag || 'play',
         parse: sniffed.parse ?? 0,
         header: sniffed.headers || sniffed.header || {
           'User-Agent': UA,
@@ -454,7 +453,6 @@ async function play(params) {
     if (sniffed && sniffed.url && isHttpUrl(sniffed.url)) {
       return {
         urls: [{ name: '默认线路', url: sniffed.url }],
-        flag: sniffed.flag || 'play',
         parse: sniffed.parse ?? 0,
         header: sniffed.headers || sniffed.header || {
           'User-Agent': UA,

@@ -6,7 +6,7 @@
  * @searchable 1
  * @quickSearch 1
  * @changeable 0
- * @version 1.0.3
+ * @version 1.0.5
  * @downloadURL https://github.com/Silent1566/OmniBox-Spider/raw/main/影视/采集/歪比巴卜.js
  */
 
@@ -29,7 +29,6 @@ try {
 const axios = require('axios');
 const http = require('http');
 const https = require('https');
-const vm = require('vm');
 const CryptoJS = require('crypto-js');
 
 const SITE = {
@@ -199,119 +198,6 @@ function buildWbbbResolveTitle(html = '', player = {}) {
   return title || vodName || '在线播放';
 }
 
-function createWbbbVmSandbox(pageUrl) {
-  const noop = () => {};
-  const jq = function jqStub() {
-    return {
-      on: noop,
-      hide: noop,
-      show: noop,
-      html: noop,
-      text: noop,
-      click: noop,
-      append: noop,
-      remove: noop,
-      css: noop,
-      attr: noop,
-      addClass: noop,
-      removeClass: noop,
-      find: () => ({}),
-      val: () => '',
-      ready: noop,
-      length: 0,
-    };
-  };
-  jq.post = noop;
-  jq.ajax = noop;
-  jq.get = noop;
-  jq.fn = {};
-  const loc = new URL(pageUrl);
-  const sandbox = {
-    console,
-    CryptoJS,
-    URL,
-    URLSearchParams,
-    atob: (text) => Buffer.from(text, 'base64').toString('binary'),
-    btoa: (text) => Buffer.from(text, 'binary').toString('base64'),
-    setTimeout: noop,
-    setInterval: () => 0,
-    clearTimeout: noop,
-    clearInterval: noop,
-    fetch: async () => ({ ok: true, status: 200, headers: new Map(), text: async () => '', json: async () => ({}) }),
-    localStorage: { getItem: () => null, setItem: noop, removeItem: noop },
-    sessionStorage: { getItem: () => null, setItem: noop, removeItem: noop },
-    navigator: { userAgent: SITE.ua, clipboard: { writeText: async () => {} } },
-    document: {
-      title: 'wbbb-parser',
-      body: {},
-      addEventListener: noop,
-      querySelector: () => null,
-      createElement: () => ({ style: {}, click: noop }),
-      getElementById: () => ({ style: {}, addEventListener: noop, play: async () => {}, pause: noop }),
-    },
-    location: {
-      origin: loc.origin,
-      pathname: loc.pathname,
-      search: loc.search,
-      href: loc.toString(),
-      host: loc.host,
-    },
-    window: null,
-    top: null,
-    parent: null,
-    self: null,
-    $: jq,
-    jQuery: jq,
-    Artplayer() {
-      return {
-        on: noop,
-        once: noop,
-        emit: noop,
-        destroy: noop,
-        template: {},
-        plugins: {},
-        setting: { show: noop },
-        controls: { add: noop },
-        layers: { add: noop },
-        events: { proxy: noop },
-        notice: { show: noop },
-        storage: { get: () => null, set: noop },
-      };
-    },
-    animation: {},
-  };
-  sandbox.window = sandbox;
-  sandbox.top = sandbox;
-  sandbox.parent = sandbox;
-  sandbox.self = sandbox;
-  return sandbox;
-}
-
-async function getWbbbResolveRuntime(parsePageUrl, parseHtml) {
-  const settingSrc = pickMatch(parseHtml, /<script[^>]+src=["']([^"']*setting\.js[^"']*)["']/i, 1, '');
-  if (!settingSrc) throw new Error('setting.js missing');
-  const settingUrl = new URL(settingSrc, parsePageUrl).toString();
-  const settingRes = await httpClient.get(settingUrl, {
-    headers: {
-      'User-Agent': SITE.ua,
-      'Referer': parsePageUrl,
-    },
-  });
-  const settingCode = `${ok(settingRes)}\n;globalThis.__wbbbResolveRuntime={ urlValueurl, keyValue, vkeyValue, ckeyValue, nextParam, titleParam };`;
-  const sandbox = createWbbbVmSandbox(parsePageUrl);
-  vm.createContext(sandbox);
-  vm.runInContext(settingCode, sandbox, { timeout: 5000 });
-  const runtime = {
-    ...(sandbox.__wbbbResolveRuntime || {}),
-    decrypt: typeof sandbox.decrypt === 'function' ? sandbox.decrypt.bind(sandbox) : null,
-    deplay: typeof sandbox.deplay === 'function' ? sandbox.deplay.bind(sandbox) : null,
-  };
-  if (!runtime.urlValueurl || !runtime.keyValue || !runtime.vkeyValue || !runtime.ckeyValue) {
-    throw new Error('setting runtime params missing');
-  }
-  return runtime;
-}
-
 function absUrl(url = '') {
   if (!url) return '';
   if (/^https?:\/\//i.test(url)) return url;
@@ -459,28 +345,54 @@ function decodeAesMaybeBase64(value = '') {
   return CryptoJS.enc.Utf8.parse(text);
 }
 
-async function resolveWbbbPlayerUrl(playerToken, nextUrl, title) {
-  const nextParam = toProtocolRelativeUrl(nextUrl);
-  const titleParam = String(title || '').trim();
-  const parsePageUrl = `https://xn--qvr2v.850088.xyz/player/?url=${encodeURIComponent(playerToken)}${nextParam ? `&next=${encodeURIComponent(nextParam)}` : ''}${titleParam ? `&title=${encodeURIComponent(titleParam)}` : ''}`;
+function rc4b64(key, data) {
+  const S = [];
+  for (let i = 0; i < 256; i++) S[i] = i;
+  let j = 0, x;
+  for (let i = 0; i < 256; i++) {
+    j = (j + S[i] + key.charCodeAt(i % key.length)) & 255;
+    x = S[i]; S[i] = S[j]; S[j] = x;
+  }
+  let i = 0; j = 0;
+  const bytes = Buffer.from(data, 'utf8');
+  const res = [];
+  for (let c of bytes) {
+    i = (i + 1) & 255;
+    j = (j + S[i]) & 255;
+    x = S[i]; S[i] = S[j]; S[j] = x;
+    res.push(c ^ S[(S[i] + S[j]) & 255]);
+  }
+  return Buffer.from(res).toString('base64');
+}
+
+async function resolveWbbbPlayerUrl(playerToken, nextUrl, title, urlNextToken, linkNext) {
+  const host = 'xn--qvr2v.850088.xyz';
+  const salt = 'stray';
+  const urlParam = String(playerToken || '').trim();
+  if (!urlParam) throw new Error('playerToken missing');
+
+  const domainNext = String(linkNext || '').trim()
+    ? `//wbbb1.com${linkNext}`
+    : String(urlNextToken || '').trim() || toProtocolRelativeUrl(nextUrl);
+  const parsePageUrl = `https://${host}/player/?url=${encodeURIComponent(urlParam)}&next=${encodeURIComponent(domainNext)}&title=${encodeURIComponent(title || '')}`;
+
   const parseRes = await httpClient.get(parsePageUrl, {
-    headers: {
-      'User-Agent': SITE.ua,
-      'Referer': `${SITE.host}/`,
-    },
+    headers: { 'User-Agent': SITE.ua, 'Referer': `${SITE.host}/` },
   });
-  const parseHtml = ok(parseRes);
   const parserCookie = buildCookieHeader(parseRes.headers?.['set-cookie']);
-  const runtime = await getWbbbResolveRuntime(parsePageUrl, parseHtml);
-  const payloadUrl = runtime.urlValueurl || `${String(playerToken || '').trim()}${nextParam ? `&next=${nextParam}` : ''}`;
-  const apiUrl = 'https://xn--qvr2v.850088.xyz/player/api.php';
+
+  const t = String(Math.floor(Date.now() / 1000));
+  const md5 = (s) => CryptoJS.MD5(String(s)).toString();
+  const rc4key = (md5(urlParam) + ' P').slice(-22);
+
   const formPayload = {
-    url: payloadUrl,
-    key: runtime.keyValue,
-    vkey: runtime.vkeyValue,
-    ckey: runtime.ckeyValue,
+    url: urlParam,
+    key: rc4b64(rc4key, md5(urlParam + salt)),
+    vkey: rc4b64(rc4key, t + md5(rc4key + salt)),
+    ckey: rc4b64(rc4key, md5(host + salt)),
   };
-  OmniBox.log('info', `[wbbb][resolve][request] ${redactJson({ parsePageUrl, apiUrl, headers: { Origin: 'https://xn--qvr2v.850088.xyz', Referer: parsePageUrl, 'X-Requested-With': 'XMLHttpRequest', Cookie: parserCookie || '' }, payload: formPayload })}`);
+
+  const apiUrl = `https://${host}/player/api.php`;
   const formData = new URLSearchParams(formPayload).toString();
   const apiRes = await httpClient.post(apiUrl, formData, {
     headers: {
@@ -488,64 +400,30 @@ async function resolveWbbbPlayerUrl(playerToken, nextUrl, title) {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       'X-Requested-With': 'XMLHttpRequest',
       'Referer': parsePageUrl,
-      'Origin': 'https://xn--qvr2v.850088.xyz',
+      'Origin': `https://${host}`,
       ...(parserCookie ? { Cookie: parserCookie } : {}),
     },
   });
+
   const payload = typeof apiRes.data === 'string' ? JSON.parse(apiRes.data) : apiRes.data;
-  OmniBox.log('info', `[wbbb][resolve][payload] ${redactJson(payload)}`);
-  if (!payload || Number(payload.code) !== 200 || !payload.url) {
+  if (!payload || !payload.url) {
     throw new Error(payload && payload.msg ? payload.msg : 'parse api failed');
   }
-  const encUrl = String(payload.url || '').trim();
-  let finalUrl = '';
-  if (encUrl && runtime && typeof runtime.decrypt === 'function') {
-    try {
-      finalUrl = (runtime.decrypt(encUrl) || '').trim();
-      try { finalUrl = decodeURIComponent(finalUrl); } catch (_) {}
-    } catch (_) {}
-  }
-  if (!finalUrl && encUrl && runtime && typeof runtime.deplay === 'function') {
-    try {
-      const decodedKey = String(runtime.deplay(payload.aes_key || '') || '').trim();
-      const decodedIv = String(runtime.deplay(payload.aes_iv || '') || '').trim();
-      if (decodedKey && decodedIv) {
-        const decrypted = CryptoJS.AES.decrypt(encUrl, CryptoJS.enc.Utf8.parse(decodedKey), {
-          iv: CryptoJS.enc.Utf8.parse(decodedIv),
-          mode: CryptoJS.mode.CBC,
-          padding: CryptoJS.pad.Pkcs7,
-        });
-        finalUrl = (decrypted.toString(CryptoJS.enc.Utf8) || '').trim();
-        try { finalUrl = decodeURIComponent(finalUrl); } catch (_) {}
-      }
-    } catch (_) {}
-  }
-  if (!finalUrl) {
-    const aesKey = decodeAesMaybeBase64(payload.aes_key || '');
-    const aesIv = decodeAesMaybeBase64(payload.aes_iv || '');
-    if (encUrl && aesKey && aesIv) {
-      try {
-        const decrypted = CryptoJS.AES.decrypt(encUrl, aesKey, {
-          iv: aesIv,
-          mode: CryptoJS.mode.CBC,
-          padding: CryptoJS.pad.Pkcs7,
-        });
-        finalUrl = (decrypted.toString(CryptoJS.enc.Utf8) || '').trim();
-        try { finalUrl = decodeURIComponent(finalUrl); } catch (_) {}
-      } catch (_) {}
-    }
-  }
-  if (!finalUrl && /^https?:\/\//i.test(encUrl)) finalUrl = encUrl;
-  if (!finalUrl) {
-    try { finalUrl = decodeURIComponent(encUrl); } catch (_) {
-      finalUrl = encUrl;
-    }
-  }
-  if (finalUrl.startsWith('//')) finalUrl = `https:${finalUrl}`;
-  if (finalUrl.startsWith('/')) finalUrl = absUrl(finalUrl);
-  if (!isDirectMediaUrl(finalUrl, payload.type || '')) finalUrl = parsePageUrl;
-  OmniBox.log('info', `[wbbb][resolve][final] ${redactJson({ type: payload.type || '', url: finalUrl, parsePageUrl })}`);
-  return { url: finalUrl, type: payload.type || '', parsePageUrl };
+
+  const key = CryptoJS.enc.Utf8.parse('OddfJktEbGu7gCv9');
+  const iv = CryptoJS.enc.Utf8.parse('okjutU3RjGpWqB8Z');
+  const decryptResult = CryptoJS.AES.decrypt(payload.url, key, {
+    iv,
+    mode: CryptoJS.mode.CBC,
+    padding: CryptoJS.pad.Pkcs7,
+  });
+  const finalUrl = (decryptResult.toString(CryptoJS.enc.Utf8) || '').trim();
+
+  if (!finalUrl) throw new Error('decrypt failed');
+  let resultUrl = finalUrl;
+  if (finalUrl.startsWith('//')) resultUrl = `https:${finalUrl}`;
+  else if (finalUrl.startsWith('/')) resultUrl = `${SITE.host}${finalUrl}`;
+  return { url: resultUrl, type: payload.type || '', parsePageUrl, cookie: parserCookie };
 }
 
 async function home(params = {}) {
@@ -774,10 +652,10 @@ async function play(params = {}) {
     }
     // Attempt direct media URL
     const from = String(player.from || '').trim();
-    const nextUrl = id;
     const title = buildWbbbResolveTitle(html, player);
-    OmniBox.log('info', `[wbbb][play][resolve-meta] current=${redactSensitive(id)}, link_next=${redactSensitive(player?.link_next || '')}, nextUrl=${redactSensitive(nextUrl)}, title=${title}`);
-    // 1. 尝试通过静态 playerconfig.js 获取解析地址（在 SDK 嗅探前）
+    OmniBox.log('info', `[wbbb][play][resolve-meta] current=${redactSensitive(id)}, from=${from}, title=${title}`);
+
+    // 尝试通过静态 playerconfig.js 获取解析地址（在 SDK 嗅探前）
     const parseCandidates = [
       '/static/js/playerconfig.js',
       `/static/player/${from}.js`,
@@ -827,14 +705,17 @@ async function play(params = {}) {
     // Resolve via external service
     let resolved = null;
     try {
-      resolved = await resolveWbbbPlayerUrl(String(player.url || ''), nextUrl, title);
+      resolved = await resolveWbbbPlayerUrl(String(player.url || ''), '', title, String(player.url_next || '').trim(), String(player.link_next || '').trim());
     } catch (_) {}
     // If we got a resolved URL, prefer direct media return for tvbox/非 sniff 宿主
     if (resolved && resolved.url) {
       const resolvedUrl = String(resolved.url || '').trim();
       const resolvedType = String(resolved.type || '').trim();
-      const resolvedHeaders = buildPlayHeaders({ Referer: resolved.parsePageUrl || `${SITE.host}/` });
-      OmniBox.log('info', `[wbbb][play][resolved] url=${redactSensitive(resolvedUrl)}, type=${resolvedType || 'unknown'}, parsePage=${redactSensitive(resolved.parsePageUrl || '')}`);
+      const resolvedHeaders = buildPlayHeaders({
+        Referer: resolved.parsePageUrl || `${SITE.host}/`,
+        ...(resolved.cookie ? { Cookie: resolved.cookie } : {}),
+      });
+      OmniBox.log('info', `[wbbb][play][resolved] url=${redactSensitive(resolvedUrl)}, type=${resolvedType || 'unknown'}, parsePage=${redactSensitive(resolved.parsePageUrl || '')}, hasCookie=${!!resolved.cookie}`);
       if (isDirectMediaUrl(resolvedUrl, resolvedType)) {
         return { parse: 0, jx: 0, url: resolvedUrl, playId: resolvedUrl, header: resolvedHeaders };
       }

@@ -2,7 +2,7 @@
 // @author OmniBox
 // @description YouTube影视源，支持分组分类、二级筛选、搜索、播放列表与视频播放
 // @dependencies: axios
-// @version 1.1.0
+// @version 1.1.1
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/流媒体/YouTube.js
 
 const axios = require("axios");
@@ -533,7 +533,7 @@ async function play(params = {}) {
   const playId = params.playId || params.id || "";
   const flag = params.flag || "";
 
-  if (!playId) return { urls: [], parse: 1, flag };
+  if (!playId) return { urls: [], parse: 1 };
 
   logInfo("播放解析", { playId });
 
@@ -544,9 +544,7 @@ async function play(params = {}) {
       return {
         urls: [{ name: "YouTube播放列表", url: vid }],
         parse: 0,
-        header: { "User-Agent": UA },
-        flag,
-      };
+        header: { "User-Agent": UA }};
     }
 
     const urlMatch = vid.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
@@ -556,9 +554,7 @@ async function play(params = {}) {
       return {
         urls: [{ name: "播放", url: vid }],
         parse: 0,
-        header: { "User-Agent": UA },
-        flag,
-      };
+        header: { "User-Agent": UA }};
     }
   }
 
@@ -567,27 +563,21 @@ async function play(params = {}) {
     return {
       urls: [{ name: "YouTube播放列表", url }],
       parse: 0,
-      header: { "User-Agent": UA },
-      flag,
-    };
+      header: { "User-Agent": UA }};
   }
 
   if (!/[a-zA-Z0-9_-]{11}/.test(vid)) {
     return {
       urls: [{ name: "播放", url: vid }],
       parse: 0,
-      header: { "User-Agent": UA },
-      flag,
-    };
+      header: { "User-Agent": UA }};
   }
 
   const watchUrl = `https://www.youtube.com/watch?v=${vid}`;
   return {
     urls: [{ name: "YouTube", url: watchUrl }],
     parse: 0,
-    header: { "User-Agent": UA },
-    flag,
-  };
+    header: { "User-Agent": UA }};
 }
 
 module.exports = { home, category, search, detail, play };

@@ -2,7 +2,7 @@
 // @push 1
 // @author lampon
 // @description 推送脚本
-// @version 1.0.5
+// @version 1.0.6
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/模板/JavaScript/推送脚本.js
 
 const OmniBox = require("omnibox_sdk");
@@ -593,12 +593,10 @@ async function play(params) {
     let finalDanmakuList = danmakuList && danmakuList.length > 0 ? danmakuList : playInfo.danmaku || [];
 
     return {
-      urls: urlsResult,
-      flag: shareURL, // 返回网盘分享链接作为flag
+      urls: urlsResult, // 返回网盘分享链接作为flag
       header: header,
       parse: 0,
-      danmaku: finalDanmakuList,
-    };
+      danmaku: finalDanmakuList};
   } catch (error) {
     OmniBox.log("error", `播放接口失败: ${error.message}`);
     if (error.stack) {
@@ -606,10 +604,8 @@ async function play(params) {
     }
     return {
       urls: [],
-      flag: params.flag || "",
       header: {},
-      danmaku: [],
-    };
+      danmaku: []};
   }
 }
 

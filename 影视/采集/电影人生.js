@@ -2,7 +2,7 @@
 // @author 梦
 // @description 页面解析：已接入；播放优先直解析，失败后 SDK 嗅探，再失败交给播放器嗅探
 // @dependencies cheerio
-// @version 1.1.0
+// @version 1.1.1
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/影视/采集/电影人生.js
 
 const OmniBox = require("omnibox_sdk");
@@ -384,7 +384,6 @@ async function trySdkSniff(targetUrl, headers, meta) {
         parse: 0,
         url: sniffUrl,
         urls: [{ name: meta.title || "播放页", url: sniffUrl }],
-        flag: sniffResult?.flag || "sniff",
         header: headers,
         headers,
       };
@@ -401,7 +400,6 @@ function buildPlayerSniffFallback(targetUrl, headers, meta) {
     parse: 1,
     url: targetUrl,
     urls: [{ name: meta.title || "播放页", url: targetUrl }],
-    flag: "dyrs",
     header: headers,
     headers,
   };
@@ -414,7 +412,7 @@ function looksLikeDirectMedia(url) {
 async function play(params, context) {
   try {
     const raw = String(params.playId || params.play_id || "").trim();
-    if (!raw) return { parse: 1, url: "", urls: [], flag: "dyrs", header: {}, headers: {} };
+    if (!raw) return { parse: 1, url: "", urls: [], header: {}, headers: {} };
 
     let meta = {};
     try {
@@ -432,7 +430,7 @@ async function play(params, context) {
     };
 
     await OmniBox.log("info", `[电影人生][play] page=${safePageUrl}`);
-    if (!safePageUrl) return { parse: 1, url: "", urls: [], flag: "dyrs", header: headers, headers };
+    if (!safePageUrl) return { parse: 1, url: "", urls: [], header: headers, headers };
 
     const html = await fetchText(safePageUrl, { headers: { Referer: BASE_URL + "/" } });
     const match = html.match(/\/api\/m3u8\?origin=([^"'\\\s&]+|[^"'\\\s]+?)(&amp;|\\u0026|&)url=([a-zA-Z0-9]+)/);
@@ -487,7 +485,6 @@ async function play(params, context) {
         parse: 0,
         url: directUrl,
         urls: [{ name: meta.title || "播放页", url: directUrl }],
-        flag: "m3u8",
         header: headers,
         headers,
       };
@@ -508,6 +505,6 @@ async function play(params, context) {
     return buildPlayerSniffFallback(safePageUrl, headers, meta);
   } catch (e) {
     await OmniBox.log("error", `[电影人生][play] ${e.message}`);
-    return { parse: 1, url: "", urls: [], flag: "dyrs", header: {}, headers: {} };
+    return { parse: 1, url: "", urls: [], header: {}, headers: {} };
   }
 }
