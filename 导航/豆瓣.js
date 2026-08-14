@@ -2,7 +2,7 @@
 // @indexs 1
 // @author lampon
 // @description 豆瓣推荐爬虫脚本
-// @version 1.0.8
+// @version 1.0.9
 // @downloadURL https://gh-proxy.org/https://github.com/Silent1566/OmniBox-Spider/raw/refs/heads/main/导航/豆瓣推荐.js
 
 const OmniBox = require("omnibox_sdk");
@@ -579,8 +579,17 @@ async function home(params, context) {
               vod_remarks = "新剧";
             }
 
-            // ====== 修改点：直接使用原始图片URL，不走代理 ======
+            // 处理图片URL，通过代理加载（解决豆瓣防盗链问题）
             let vod_pic = item.pic?.large || item.pic?.normal || "";
+            if (vod_pic) {
+              const urlWithHeaders = `${vod_pic}@Referer=https://m.douban.com`;
+              if (baseURL) {
+                const encodedUrl = encodeURIComponent(urlWithHeaders);
+                vod_pic = `${baseURL}/api/proxy/image?url=${encodedUrl}`;
+              } else {
+                vod_pic = urlWithHeaders;
+              }
+            }
 
             // 构建副标题（从card_subtitle提取，去除年份部分）
             let vod_subtitle = "";
@@ -813,8 +822,18 @@ async function category(params, context) {
         vod_remarks = categoryId === "movie" ? "新片" : "新剧";
       }
 
-      // ====== 修改点：直接使用原始图片URL，不走代理 ======
+      // 处理图片URL，通过代理加载（解决豆瓣防盗链问题）
+      const baseURL = context.baseURL || "";
       let vod_pic = item.pic?.large || item.pic?.normal || "";
+      if (vod_pic) {
+        const urlWithHeaders = `${vod_pic}@Referer=https://m.douban.com`;
+        if (baseURL) {
+          const encodedUrl = encodeURIComponent(urlWithHeaders);
+          vod_pic = `${baseURL}/api/proxy/image?url=${encodedUrl}`;
+        } else {
+          vod_pic = urlWithHeaders;
+        }
+      }
 
       // 构建副标题（从card_subtitle提取，去除年份部分）
       let vod_subtitle = "";
